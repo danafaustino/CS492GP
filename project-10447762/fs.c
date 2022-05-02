@@ -1307,6 +1307,9 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
 
 static void fs_read_blk(int blk_num, char *buf, size_t len, size_t offset) {
 	//CS492: your code here
+	char entries[BLOCK_SIZE];
+	memset(entries, 0, BLOCK_SIZE);
+	if (disk->ops->read(disk, blk_num, 1, entries) < 0) exit(1);
 }
 
 static size_t fs_read_dir(size_t inode_idx, char *buf, size_t len, size_t offset) {
@@ -1412,7 +1415,31 @@ static int fs_read(const char *path, char *buf, size_t len, off_t offset,
 		    struct fuse_file_info *fi)
 {
 	//CS492: your code here
-	return -1;
+	struct stat sb;
+
+	if ((fs_getattr(path, &sb)) == -1) {
+		return -1;
+	}
+
+	char *_path = strdup(path); 			// Duplicates path 
+	int inum = path_to_inum(_path);
+	struct fs_inode inode = inodes[inum];
+	
+	if (offset >= inode.size){
+		return 0;
+	}
+
+	if (offset + len > inode.size){
+		return EOF; 
+	}
+
+    if (len > FS_BLOCK_SIZE) {
+    	len = FS_BLOCK_SIZE - n_offset;
+    }
+
+    if (len <= 0) {
+    	return 0;
+    }
 }
 
 static void fs_write_blk(int blk_num, const char *buf, size_t len, size_t offset) {
