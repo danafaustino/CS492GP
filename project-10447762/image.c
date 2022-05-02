@@ -42,10 +42,10 @@ static int image_num_blocks(struct blkdev *dev)
 	struct image_dev *img = dev->private;
 
 	if (!img || !(img->nblks)) {		// Check if img or nblks are NULL
-		return E_BADADDR;
+		return E_BADADDR;				// If either are NULL, return bad address
 	}
 	
-	return img->nblks;		// Return the number of blocks in the block device
+	return img->nblks;		// Otherwise, return the number of blocks in the block device
 }
 
 
@@ -99,7 +99,25 @@ static int image_read(struct blkdev *dev, int first_blk, int nblks, void *buf)
 static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 {
 	//CS492: your code here
-	return -1;
+	struct image_dev *img = dev->private;
+	int size = nblks * BLOCK_SIZE;
+
+	if (img->fd < 0) {
+		return E_UNAVAIL;			// Return device unavailable
+	}
+
+	if ((first_blk <= 0) || (first_blk + nblks > image->nblks)) {		
+		return E_BADADDR;		
+	}
+
+	int offset = first_blk * BLOCK_SIZE;
+	int output = pwrite(img->fd, buf, size, offset);
+
+	if (output != size) {
+		return E_BADADDR;
+	}
+
+	return SUCCESS;
 }
 
 /**
