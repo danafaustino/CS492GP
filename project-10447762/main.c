@@ -7,6 +7,7 @@ struct stat sb;
  * Credit:
  * 	Peter Desnoyers, November 2016
  * 	Philip Gust, March 2019
+ *  Test Comment
  */
 
 #define FUSE_USE_VERSION 27
