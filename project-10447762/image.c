@@ -133,6 +133,7 @@ static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 {
 	//CS492: your code here
+
 	return -1;
 }
 
