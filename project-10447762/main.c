@@ -7,7 +7,6 @@ struct stat sb;
  * Credit:
  * 	Peter Desnoyers, November 2016
  * 	Philip Gust, March 2019
- *  Test Comment
  */
 
 #define FUSE_USE_VERSION 27
@@ -787,6 +786,7 @@ static int cmdloop(void)
 
 		// process command
 		int err = cmds[i].f(&args[1]);
+		printf("%s, %s\n", cmds[i], &args[1]);
 		if (err != 0) {
 			printf("error: %s\n", strerror(-err));
 		}
