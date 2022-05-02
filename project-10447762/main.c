@@ -241,7 +241,7 @@ static int do_cd1(char *argv[])
 			free(names);
 			return 0;
 		} else {
-			printf('19\n');
+			printf("19\n");
 			return -ENOTDIR;
 		}
 	} else {
