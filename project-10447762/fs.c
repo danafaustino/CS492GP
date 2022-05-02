@@ -418,23 +418,47 @@ void* fs_init(struct fuse_conn_info *conn)
 	// read the superblock
 	//CS492: your code below
 	struct fs_super sb;
+	struct blkdev_ops *blk = disk->ops;
+	int read = blk->read(disk, 0, 1, &sb);		// Read the superblock
 
+	int inode_map_sz;
+	int inode_region_sz;
+	int block_map_sz;
 
+	if (read < 0) {
+		return -1;
+	}
 
+	inode_map = (fd_set *) malloc(FS_BLOCK_SIZE * sb.inode_map_sz);
+	block_map = (fd_set *) malloc(FS_BLOCK_SIZE * sb.block_map_sz);
+	inodes = (struct fs_inode *)malloc(FS_BLOCK_SIZE * sb.inode_region_sz);
+
+	inode_map_sz = sb.inode_map_sz;
+	inode_region_sz = sb.inode_region_sz;
+	block_map_sz = sb.block_map_sz;
+	//root_inode = sb.root_inode;
 	root_inode = 42;
 
 	/* The inode map and block map are directly after the superblock */
 	// read inode map
 	//CS492: your code below
 	inode_map_base = 1; // This is correct.
-	inode_map = NULL;
+	//inode_map = NULL;
+
+	if ((blk->read(disk, 1, inode_map_sz, inode_map)) < 0) {		// Check inode_map
+		exit(1);
+	}
 
 
 
 	// read block map
 	//CS492: your code below
 	block_map_base = 42;
-	block_map = NULL;
+	//block_map = NULL;
+
+	if ((blk->read(disk, inode_map_sz + 1, block_map_sz, block_map)) < 0) {			// Check block_map
+		exit(1);
+	}
 
 
 
@@ -442,8 +466,11 @@ void* fs_init(struct fuse_conn_info *conn)
 	//CS492: your code below
 	inode_base = 42;
 	n_inodes = 42;
-	inodes = NULL;
+	//inodes = NULL;
 
+	if ((blk->read(disk, inode_map_sz + block_map_sz, inode_region_sz, inodes)) < 0) {		// Check inodes
+		exit(1);
+	}
 
 
 	// number of blocks on device
