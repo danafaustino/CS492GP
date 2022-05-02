@@ -174,9 +174,7 @@ static void free_char_ptr_array(char *arr[], int len) {
  */
 static int translate(char *path)
 {
-	printf("%s\n", path);
 	if (strcmp(path, "/") == 0 || strlen(path) == 0) {
-		printf("here %d\n", root_inode);
 		return root_inode;
 	}
 	int inode_idx = root_inode;
@@ -184,7 +182,6 @@ static int translate(char *path)
 	int num_names = parse(path, NULL, 0);
 	//if the number of names in the path exceed the maximum, return an error, error type to be fixed if necessary
 	if (num_names < 0) {
-		printf("1\n");
 		return -ENOTDIR;
 	}
 	if (num_names == 0) return root_inode;
@@ -197,7 +194,6 @@ static int translate(char *path)
 		//if token is not a directory return error
 		if (!S_ISDIR(inodes[inode_idx].mode)) {
 			free_char_ptr_array(names, num_names);
-			printf("2\n");
 			return -ENOTDIR;
 		}
 		//lookup and record inode
@@ -232,7 +228,6 @@ static int translate_1(char *path, char *leaf)
 	int num_names = parse(path, NULL, 0);
 	//if the number of names in the path exceed the maximum, return an error, error type to be fixed if necessary
 	if (num_names < 0) {
-		printf("3\n");
 		return -ENOTDIR;
 	}
 	if (num_names == 0) return root_inode;
@@ -245,7 +240,6 @@ static int translate_1(char *path, char *leaf)
 		//if token is not a directory return error
 		if (!S_ISDIR(inodes[inode_idx].mode)) {
 			free_char_ptr_array(names, num_names);
-			printf("4\n");
 			return -ENOTDIR;
 		}
 		//lookup and record inode
@@ -497,7 +491,6 @@ int path_to_inum(char *path) {
 
 	int count = readPath(path, NULL, 0);
 	if (count < 0) {
-		printf("5\n");
 		return -ENOTDIR;
 	}
 
@@ -517,7 +510,6 @@ int path_to_inum(char *path) {
 				for (int x = 0; x < count; x++) {
 					free(pathNames[x]);
 				}
-				printf("6\n");
 				return -ENOTDIR;
 			}
 
@@ -549,7 +541,6 @@ int path_to_parent_inum(char *path, char *child) {
 	}
 	int count = readPath(path, NULL, 0);
 	if (count < 0) {
-		printf("7\n");
 		return -ENOTDIR;
 	}
 	if (count == 0) {
@@ -566,7 +557,6 @@ int path_to_parent_inum(char *path, char *child) {
 				for (int x = 0; x < count; x++) {
 					free(pathNames[x]);
 				}
-				printf("8\n");
 				return -ENOTDIR;
 			}
 
@@ -737,10 +727,10 @@ static int fs_opendir(const char *path, struct fuse_file_info *fi)
 	char *_path = strdup(path);
 	int inode_idx = translate(_path);
 	if (inode_idx < 0) return inode_idx;
+	// Dana: This is where error is - .mode is returning 0
 	if (!S_ISDIR(inodes[inode_idx].mode)){
 		// print the mode
 		printf("%o\n", inodes[inode_idx].mode);
-		printf("9\n");
 		return -ENOTDIR;
 	} 
 	fi->fh = (uint64_t) inode_idx;
@@ -773,7 +763,6 @@ static int fs_readdir(const char *path, void *ptr, fuse_fill_dir_t filler,
 	if (inode_idx < 0) return inode_idx;
 	struct fs_inode *inode = &inodes[inode_idx];
 	if (!S_ISDIR(inode->mode)) {
-		printf("10\n");
 		return -ENOTDIR;
 	}
 	struct fs_dirent entries[DIRENTS_PER_BLK];
@@ -806,7 +795,6 @@ static int fs_releasedir(const char *path, struct fuse_file_info *fi)
 	int inode_idx = translate(_path);
 	if (inode_idx < 0) return inode_idx;
 	if (!S_ISDIR(inodes[inode_idx].mode)) {
-		printf("11\n");
 		return -ENOTDIR;
 	}
 	fi->fh = (uint64_t) -1;
@@ -865,7 +853,6 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 	//read parent info
 	struct fs_inode *parent_inode = &inodes[parent_inode_idx];
 	if (!S_ISDIR(parent_inode->mode)) {
-		printf("12\n");
 		return -ENOTDIR;
 	}
 
@@ -910,7 +897,6 @@ static int fs_mkdir(const char *path, mode_t mode)
 	int i = 0;
 	
 	if (!S_ISDIR(mode | S_IFDIR)) {			// Check if component of path is not a directory
-		printf("13\n");
 		return -ENOTDIR;
 	}
 
@@ -933,7 +919,6 @@ static int fs_mkdir(const char *path, mode_t mode)
 
 	struct fs_inode inode = inodes[path_to_parent_inum(copy, pathName)];
 	if (!S_ISDIR(inode.mode)) {
-		printf("14\n");
 		return -ENOTDIR;
 	}
 
@@ -1181,7 +1166,6 @@ static int fs_unlink(const char *path)
 	if (inode_idx < 0 || parent_inode_idx < 0) return -ENOENT;
 	if (S_ISDIR(inode->mode)) return -EISDIR;
 	if (!S_ISDIR(parent_inode->mode)) {
-		printf("15\n");
 		return -ENOTDIR;
 	}
 
@@ -1239,12 +1223,10 @@ static int fs_rmdir(const char *path)
 	char src[FS_FILENAME_SIZE];
 
 	if (!(S_ISDIR(inode->mode))) {				// Check if not a directory (inode)
-		printf("16\n");
 		return -ENOTDIR;
 	}
 
 	if (!(S_ISDIR(parent_inode->mode))) {		// Check if not a directory (parent inode)
-		printf("17\n");
 		return -ENOTDIR;
 	}
 
@@ -1334,7 +1316,6 @@ static int fs_rename(const char *src_path, const char *dst_path)
 	//read parent dir inode
 	struct fs_inode *parent_inode = &inodes[parent_inode_idx];
 	if (!S_ISDIR(parent_inode->mode)) {
-		printf("18\n");
 		return -ENOTDIR;
 	}
 
