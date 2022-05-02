@@ -174,7 +174,11 @@ static void free_char_ptr_array(char *arr[], int len) {
  */
 static int translate(char *path)
 {
-	if (strcmp(path, "/") == 0 || strlen(path) == 0) return root_inode;
+	printf("%s\n", path);
+	if (strcmp(path, "/") == 0 || strlen(path) == 0) {
+		printf("here %d\n", root_inode);
+		return root_inode;
+	}
 	int inode_idx = root_inode;
 	//get number of names
 	int num_names = parse(path, NULL, 0);
