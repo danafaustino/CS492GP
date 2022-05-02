@@ -102,19 +102,24 @@ static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 	struct image_dev *img = dev->private;
 	int size = nblks * BLOCK_SIZE;
 
-	if (img->fd < 0) {
-		return E_UNAVAIL;			// Return device unavailable
+	/* Check whether the device is unavailable */
+	if (img->fd == -1) {
+		return E_UNAVAIL;
 	}
 
-	if ((first_blk <= 0) || (first_blk + nblks > image->nblks)) {		
+	if ((first_blk < 0) || (first_blk + nblks > img->nblks)) {		// Check for invalid address		
 		return E_BADADDR;		
+	} 
+
+	if (first_blk == 0) {
+		fprintf("WARNING: Writing to superblock (block 0).")		// Warning message when writing to the superblock
 	}
 
 	int offset = first_blk * BLOCK_SIZE;
 	int output = pwrite(img->fd, buf, size, offset);
 
 	if (output != size) {
-		return E_BADADDR;
+		return E_BADADDR;			// Return error when write fails
 	}
 
 	return SUCCESS;
@@ -134,7 +139,12 @@ static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 {
 	//CS492: your code here
 
-	return -1;
+	/* Check whether the device is unavailable */
+	if (img->fd == -1) {
+		return E_UNAVAIL;
+	}
+
+	return SUCCESS;		// Otherwise, return SUCCESS
 }
 
 /**
@@ -147,6 +157,15 @@ static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 static void image_close(struct blkdev *dev)
 {
 	//CS492: your code here
+
+	/* Check whether the disk is available */
+	if (img->fd != -1) {
+		close(img->fd); 		// If available, close
+	}
+
+	free(img);					// Free img and dev, and set private to NULL
+	dev->private = NULL;
+	free(dev);
 }
 
 /** Operations on this block device */
