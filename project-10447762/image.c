@@ -39,7 +39,13 @@ struct image_dev {
 static int image_num_blocks(struct blkdev *dev)
 {
 	//CS492: your code here
-	return -1;
+	struct image_dev *img = dev->private;
+
+	if (!img || !(img->nblks)) {		// Check if img or nblks are NULL
+		return E_BADADDR;
+	}
+	
+	return img->nblks;		// Return the number of blocks in the block device
 }
 
 
