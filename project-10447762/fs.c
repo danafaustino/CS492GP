@@ -1127,8 +1127,8 @@ static int fs_rmdir(const char *path)
 	char name[1];
 	int inode_idx = 42;
 	int parent_inode_idx = 42;
-	struct fs_inode *inode = inodes[inode_idx];
-	struct fs_inode *parent_inode = inodes[parent_inode_idx];
+	struct fs_inode *inode = &inodes[inode_idx];
+	struct fs_inode *parent_inode = &inodes[parent_inode_idx];
 	char src[FS_FILENAME_SIZE];
 
 	if (!(S_ISDIR(inode->mode))) {				// Check if not a directory (inode)
