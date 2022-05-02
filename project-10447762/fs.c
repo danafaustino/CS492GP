@@ -573,7 +573,7 @@ void* fs_init(struct fuse_conn_info *conn)
 	}
 
 	// number of blocks on device
-	n_blocks = sb.n_blocks;
+	n_blocks = sb.num_blocks;
 
 	// dirty metadata blocks
 	dirty_len = inode_base + sb.inode_region_sz;
@@ -925,7 +925,6 @@ static int fs_mkdir(const char *path, mode_t mode)
 	struct fs_dirent myDirent[sizeof(struct fs_dirent)];
 
 	myDirent->valid = 1;
-	myDirent->isDir = 1;
 	myDirent->inode = freeInode;
 
 	strncpy(myDirent->name, myPath, strlen(myPath));
@@ -959,7 +958,6 @@ static int fs_mkdir(const char *path, mode_t mode)
 	}
 
 	dirents[freeDirent].valid = myDirent->valid;
-	dirents[freeDirent].isDir = myDirent->isDir;
 	dirents[freeDirent].inode = myDirent->inode;
 
 	strncpy(dirents[freeDirent].name, myDirent->name, strlen(myDirent->name));
@@ -1129,8 +1127,8 @@ static int fs_rmdir(const char *path)
 	char name[1];
 	int inode_idx = 42;
 	int parent_inode_idx = 42;
-	struct fs_inode *inode = inodes[inode_idx];
-	struct fs_inode *parent_inode = inodes[parent_inode_idx];
+	struct fs_inode *inode = *inodes[inode_idx];
+	struct fs_inode *parent_inode = *inodes[parent_inode_idx];
 	char src[FS_FILENAME_SIZE];
 
 	if (!(S_ISDIR(inode->mode))) {				// Check if not a directory (inode)
@@ -1160,12 +1158,12 @@ static int fs_rmdir(const char *path)
 	int retval = 0;
 	for (int i = 0; i < DIRENTS_PER_BLK; i++) {
 		retval = strcmp(entries[i].name, src);
-		if ((entries[i].valid) && (retval ==0)) {
-			memset(&entries[i], 0, n);
+		if ((entries[i].valid) && (retval == 0)) {
+			memset(&entries[i], 0, sizeof(struct fs_dirent));
 		}
 	}
 	
-	if ((disk->ops->write(disk, parent.direct[0], 1, entries)) < 0) {
+	if ((disk->ops->write(disk, parent_inode->direct[0], 1, entries)) < 0) {
 		return -1;
 	}
 
@@ -1434,7 +1432,7 @@ static int fs_read(const char *path, char *buf, size_t len, off_t offset,
 	}
 
     if (len > FS_BLOCK_SIZE) {
-    	len = FS_BLOCK_SIZE - n_offset;
+    	len = FS_BLOCK_SIZE;
     }
 
     if (len <= 0) {

@@ -112,7 +112,7 @@ static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 	} 
 
 	if (first_blk == 0) {
-		fprintf("WARNING: Writing to superblock (block 0).")		// Warning message when writing to the superblock
+		printf("WARNING: Writing to superblock (block 0).");		// Warning message when writing to the superblock
 	}
 
 	int offset = first_blk * BLOCK_SIZE;
@@ -138,6 +138,7 @@ static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 {
 	//CS492: your code here
+	struct image_dev *img = dev->private;
 
 	/* Check whether the device is unavailable */
 	if (img->fd == -1) {
@@ -157,6 +158,7 @@ static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 static void image_close(struct blkdev *dev)
 {
 	//CS492: your code here
+	struct image_dev *img = dev->private;
 
 	/* Check whether the disk is available */
 	if (img->fd != -1) {
