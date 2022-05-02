@@ -738,6 +738,8 @@ static int fs_opendir(const char *path, struct fuse_file_info *fi)
 	int inode_idx = translate(_path);
 	if (inode_idx < 0) return inode_idx;
 	if (!S_ISDIR(inodes[inode_idx].mode)){
+		// print the mode
+		printf("%o\n", inodes[inode_idx].mode);
 		printf("9\n");
 		return -ENOTDIR;
 	} 
