@@ -408,9 +408,8 @@ int readPath(char *path, char *pathNames[], int size) {
 	strncpy(pathCopy, path, strlen(path));
 	pathCopy[strlen(path)] = '\0';
 	int counter = 0;
-	char *token;
-
-	token = strtok(pathCopy, "/");
+	char *token = strtok(pathCopy, "/");
+	
 	while (token != NULL) {
 		int tokenLen = strlen(token);
 		if (tokenLen > FS_FILENAME_SIZE - 1) {
@@ -448,12 +447,14 @@ int readPath(char *path, char *pathNames[], int size) {
 int findPos(int pos, char *pathName) {
 	struct fs_inode myDir = inodes[pos];
 	struct fs_dirent myDirent [DIRENTS_PER_BLK];
+
 	memset(myDirent, 0, sizeof(struct fs_dirent) * DIRENTS_PER_BLK);
+
 	struct blkdev_ops *blk = disk->ops;
-	int direntCheck = blk->read(disk, myDir.direct[0], 1, &myDirent);
-	if (direntCheck < 0) {
+	if ((blk->read(disk, myDir.direct[0], 1, &myDirent)) < 0) {
 		return -1;
 	}
+
 	int inodePos = 0;
 	int i = 0;
 	while (i < DIRENTS_PER_BLK) {
@@ -486,9 +487,11 @@ int path_to_inum(char *path) {
 	if (count < 0) {
 		return -ENOTDIR;
 	}
+
 	if (count == 0) {
 		return root_inode;
 	}
+
 	else {
 		char *pathNames[count];
 		readPath(path, pathNames, count);
@@ -511,7 +514,6 @@ int path_to_inum(char *path) {
 				}
 				return -ENOENT;
 			}
-
 			i++;
 		}
 
