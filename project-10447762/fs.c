@@ -403,6 +403,76 @@ int inode_region_sz;	// inode region size
 int block_map_sz;		// block map size 
 
 /* Helper Functions */
+int readPath(char *path, char *pathNames[], int size) {
+	char pathCopy[strlen(path) + 1];
+	strncpy(pathCopy, path, strlen(path));
+	pathCopy[strlen(path)] = '\0';
+	int counter = 0;
+	char *token;
+
+	token = strtok(pathCopy, "/");
+	while (token != NULL) {
+		int tokenLen = strlen(token);
+		if (tokenLen > FS_FILENAME_SIZE - 1) {
+			return -1;
+		}
+
+		int cmp = strcmp(token, ".");
+		if (pathNames != NULL && cmp != 0 && counter < size) {
+			pathNames[counter] = malloc(sizeof(char *));
+			memset(pathNames[counter], 0, sizeof(char *));
+			strcpy(pathNames[counter], token);
+			counter = counter + 1;
+		}
+		else if (cmp != 0) {
+			counter = counter + 1;
+		}
+		else {
+			cmp = strcmp(token, "..");
+			if (cmp == 0 && counter > 0) {
+				counter = counter - 1;
+			}
+		}
+
+		token = strtok(NULL, "/");
+	}
+
+	if (counter > size && size != 0) {
+		return -1;
+	}
+	else {
+		return counter;
+	}
+}
+
+int findPos(int pos, char *pathName) {
+	struct fs_inode myDir = inodes[pos];
+	struct fs_dirent myDirent [DIRENTS_PER_BLK];
+	memset(myDirent, 0, sizeof(struct fs_dirent) * DIRENTS_PER_BLK);
+	struct blkdev_ops *blk = disk->ops;
+	int direntCheck = blk->read(disk, myDir.direct[0], 1, &myDirent);
+	if (direntCheck < 0) {
+		return -1;
+	}
+	int inodePos = 0;
+	int i = 0;
+	while (i < DIRENTS_PER_BLK) {
+		int cmp = strcmp(myDirent[i].name, pathName);
+		if (cmp == 0 && myDirent[i].valid == 1) {
+			inodePos = myDirent[i].inode;
+			break;
+		}
+		i++;
+	}
+
+	if (inodePos == 0) {
+		return -ENOENT;
+	}
+	else {
+		return inodePos;
+	}
+}
+
 int path_to_inum(char *path) {
 	if (strlen(path) == 0) {
 		return root_inode;
