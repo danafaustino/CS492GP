@@ -116,9 +116,9 @@ static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 	}
 
 	int offset = first_blk * BLOCK_SIZE;
-	int output = pwrite(img->fd, buf, size, offset);
+	int val = pwrite(img->fd, buf, size, offset);
 
-	if (output != size) {
+	if (val != size) {
 		return E_BADADDR;			// Return error when write fails
 	}
 

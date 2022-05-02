@@ -397,6 +397,114 @@ static void cpy_stat(struct fs_inode *inode, struct stat *sb) {
 	sb->st_blocks = (inode->size + FS_BLOCK_SIZE - 1) / FS_BLOCK_SIZE;
 }
 
+/* Global Variables */
+int inode_map_sz;		// inode map size
+int inode_region_sz;	// inode region size 
+int block_map_sz;		// block map size 
+
+/* Helper Functions */
+int path_to_inum(char *path) {
+	if (strlen(path) == 0) {
+		return root_inode;
+	}
+
+	if ((strcmp(path, "/")) == 0) {
+		return root_inode;
+	}
+
+	int count = readPath(path, NULL, 0);
+	if (count < 0) {
+		return -ENOTDIR;
+	}
+	if (count == 0) {
+		return root_inode;
+	}
+	else {
+		char *pathNames[count];
+		readPath(path, pathNames, count);
+
+		int currPos = root_inode;
+		int i = 0;
+		while (i < count) {
+			uint32_t type = inodes[currPos].mode;
+			if (!S_ISDIR(type)) {
+				for (int x = 0; x < count; x++) {
+					free(pathNames[x]);
+				}
+				return -ENOTDIR;
+			}
+
+			currPos = findPos(currPos, pathNames[i]);
+			if (currPos < 0) {
+				for (int x = 0; x < count; x++) {
+					free(pathNames[x]);
+				}
+				return -ENOENT;
+			}
+
+			i++;
+		}
+
+		for (int x = 0; x < count; x++) {
+			free(pathNames[x]);
+		}
+
+		return currPos;
+	}
+}
+
+int path_to_parent_inum(char *path, char *child) {
+	if ((strlen(path)) == 0) {
+		return root_inode;
+	}
+
+	if ((strcmp(path, "/")) == 0) {
+		return root_inode;
+	}
+	int count = readPath(path, NULL, 0);
+	if (count < 0) {
+		return -ENOTDIR;
+	}
+	if (count == 0) {
+		return root_inode;
+	}
+	else {
+		char *pathNames[count];
+		readPath(path, pathNames, count);
+		int currPos = root_inode;
+		int i = 0;
+		while (i < count - 1) {
+			uint32_t type = inodes[currPos].mode;
+			if (!S_ISDIR(type)) {
+				for (int x = 0; x < count; x++) {
+					free(pathNames[x]);
+				}
+				return -ENOTDIR;
+			}
+
+			currPos = findPos(currPos, pathNames[i]);
+
+			if (currPos < 0) {
+				for (int x = 0; x < count; x++) {
+					free(pathNames[x]);
+				}
+				return -ENOENT;
+			}
+
+			i++;
+		}
+		strcpy(child, pathNames[count - 1]);
+
+		for (int x = 0; x < count; x++) {
+			free(pathNames[x]);
+		}
+		return currPos;
+	}
+}
+
+
+
+
 /*
  * CS492: FUSE functions to implement are below.
 */
@@ -420,10 +528,6 @@ void* fs_init(struct fuse_conn_info *conn)
 	struct fs_super sb;
 	struct blkdev_ops *blk = disk->ops;
 	int read = blk->read(disk, 0, 1, &sb);		// Read the superblock
-
-	int inode_map_sz;
-	int inode_region_sz;
-	int block_map_sz;
 
 	if (read < 0) {
 		return -1;
@@ -449,8 +553,6 @@ void* fs_init(struct fuse_conn_info *conn)
 		exit(1);
 	}
 
-
-
 	// read block map
 	//CS492: your code below
 	block_map_base = 42;
@@ -459,8 +561,6 @@ void* fs_init(struct fuse_conn_info *conn)
 	if ((blk->read(disk, inode_map_sz + 1, block_map_sz, block_map)) < 0) {			// Check block_map
 		exit(1);
 	}
-
-
 
 	/* The inode data is in the next set of blocks */
 	//CS492: your code below
@@ -472,9 +572,8 @@ void* fs_init(struct fuse_conn_info *conn)
 		exit(1);
 	}
 
-
 	// number of blocks on device
-	n_blocks = sb.num_blocks;
+	n_blocks = sb.n_blocks;
 
 	// dirty metadata blocks
 	dirty_len = inode_base + sb.inode_region_sz;
@@ -702,7 +801,175 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 static int fs_mkdir(const char *path, mode_t mode)
 {
 	//CS492: your code here
-	return -1;
+	int freeBlock = 0;
+	int freeInode;
+	int freeDirent;
+	int shift;
+	int i = 0;
+	
+	if (!S_ISDIR(mode | S_IFDIR)) {			// Check if component of path is not a directory
+		return -ENOTDIR;
+	}
+
+	if ((strcmp(path, "/")) == 0) {		
+		return -1;
+	}
+
+	char copy[strlen(path) + 1];
+	strncpy(copy, path, strlen(path));
+	copy[strlen(path)] = '\0';				// Terminate with null character
+
+	if ((path_to_inum(&copy)) >= 0) {						// Check if file already exists
+		return -EEXIST;					
+	}
+
+	char* pathName[FS_FILENAME_SIZE];
+	if ((path_to_parent_inum(copy, pathName)) < 0) {
+		return -1;
+	}
+
+	struct fs_inode inode = inodes[path_to_parent_inum(copy, pathName)];
+	if (!S_ISDIR(inode.mode)) {
+		return -ENOTDIR;
+	}
+
+	struct blkdev_ops *blk = disk->ops;
+	struct fs_inode newInode[INODES_PER_BLK];
+
+	newInode->uid = getuid();
+	newInode->gid = getgid();
+	newInode->mode = mode | S_IFDIR;
+	newInode->ctime = time(NULL);
+	newInode->mtime = time(NULL);
+	newInode->size = 0;
+
+	while ((i < n_blocks) && (i < FS_BLOCK_SIZE * 8 * block_map_sz)) {
+		if (!FD_ISSET(i, block_map)) {
+			int *empty;
+			empty = calloc(1, FS_BLOCK_SIZE);
+
+			int checkWrite = blk->write(disk, i, 1, empty);
+			if (checkWrite < 0) {
+				return -1;
+			}
+
+			free(empty);
+			freeBlock = i;
+			break;
+		}
+		i++;
+	}
+
+	FD_SET(freeBlock, block_map);
+
+	if ((blk->write(disk, 1, inode_map_sz, inode_map)) < 0) {
+		return -1;
+	}
+
+	if ((blk->write(disk, 1 + inode_map_sz, block_map_sz, block_map)) < 0) {
+		return -1;
+	}
+
+	(newInode->direct)[0] = freeBlock;
+
+	int *empty = calloc(FS_BLOCK_SIZE, sizeof(int));
+
+	if ((blk->write(disk, (newInode->direct)[0], 1, empty)) < 0) {
+		return -1;
+	}
+
+
+	i = 2;
+	while (i < FS_BLOCK_SIZE * 8 * inode_map_sz) {
+		if (!FD_ISSET(i, inode_map)) {
+			freeInode = i;
+			break;
+		}
+		
+		i++;
+	}
+
+	if (i == FS_BLOCK_SIZE * 8 * inode_map_sz) {
+		free(empty);
+		return -ENOSPC;
+	}
+
+	FD_SET(freeInode, inode_map);
+
+	if ((blk->write(disk, 1, inode_map_sz, inode_map)) < 0) {
+		return -1;
+	}
+
+	if ((blk->write(disk, 1 + inode_map_sz, block_map_sz, block_map)) < 0) {
+		return -1;
+	}
+
+	memcpy(&inodes[freeInode], &newInode, sizeof(struct fs_inode));
+
+	shift = inode_map_sz + block_map_sz + (freeInode / INODES_PER_BLK) + 1;
+
+	if ((blk->write(disk, shift, 1, &inodes[freeInode - (freeInode % INODES_PER_BLK)])) < 0) {
+		return -1;
+	}
+
+	char *token = strtok(copy, "/");
+	char myPath[FS_FILENAME_SIZE];
+
+	while (token != NULL) {
+		int tokenLen = strlen(token);
+		strncpy(myPath, token, tokenLen);
+		myPath[tokenLen] = '\0';
+		token = strtok(NULL, "/");
+	}
+
+	struct fs_dirent myDirent[sizeof(struct fs_dirent)];
+
+	myDirent->valid = 1;
+	myDirent->isDir = 1;
+	myDirent->inode = freeInode;
+
+	strncpy(myDirent->name, myPath, strlen(myPath));
+	(myDirent->name)[strlen(myPath)] = '\0';
+
+	struct fs_dirent dirents[DIRENTS_PER_BLK];
+	memset(dirents, 0, sizeof(struct fs_dirent) * DIRENTS_PER_BLK);
+	int checkRead = blk->read(disk, inode.direct[0], 1, dirents);
+	if (checkRead < 0) {
+		return -1;
+	}
+
+
+	i = 0;
+	struct fs_dirent freeDir[sizeof(struct fs_dirent)];
+
+	if ((blk->read(disk, inode.direct[0], 1, freeDir)) < 0) {
+		return -1;
+	}
+
+	while (i < DIRENTS_PER_BLK) {
+		if (freeDir[i].valid == 0) {
+			freeDirent = i;
+			break;
+		}
+		i++;
+	}
+
+	if (i == DIRENTS_PER_BLK) {
+		return -ENOSPC;
+	}
+
+	dirents[freeDirent].valid = myDirent->valid;
+	dirents[freeDirent].isDir = myDirent->isDir;
+	dirents[freeDirent].inode = myDirent->inode;
+
+	strncpy(dirents[freeDirent].name, myDirent->name, strlen(myDirent->name));
+
+	if ((blk->write(disk, inode.direct[0], 1, dirents)) < 0) {
+		return -1;
+	}
+
+	free(empty);
+	return 0;			// Return 0 if successful
 }
 
 static void fs_truncate_dir(uint32_t *de) {
@@ -858,14 +1125,21 @@ static int fs_rmdir(const char *path)
 
 	//get inodes and check
 	//CS492: your code below
-	char *_path = NULL;
+	char *_path = strdup(path);
 	char name[1];
 	int inode_idx = 42;
 	int parent_inode_idx = 42;
-	struct fs_inode *inode = NULL;
-	struct fs_inode *parent_inode = NULL;
+	struct fs_inode *inode = inodes[inode_idx];
+	struct fs_inode *parent_inode = inodes[parent_inode_idx];
+	char src[FS_FILENAME_SIZE];
 
+	if (!(S_ISDIR(inode->mode))) {				// Check if not a directory (inode)
+		return -ENOTDIR;
+	}
 
+	if (!(S_ISDIR(parent_inode->mode))) {		// Check if not a directory (parent inode)
+		return -ENOTDIR;
+	}
 
 	//check if dir if empty
 	struct fs_dirent entries[DIRENTS_PER_BLK];
@@ -877,8 +1151,23 @@ static int fs_rmdir(const char *path)
 
 	//remove entry from parent dir
 	//CS492: your code below
+	memset(entries, 0, sizeof(struct fs_dirent));
 
+	if ((disk->ops->read(disk, parent_inode->direct[0], 1, entries)) < 0) {
+		return -1;
+	}
 
+	int retval = 0;
+	for (int i = 0; i < DIRENTS_PER_BLK; i++) {
+		retval = strcmp(entries[i].name, src);
+		if ((entries[i].valid) && (retval ==0)) {
+			memset(&entries[i], 0, n);
+		}
+	}
+	
+	if ((disk->ops->write(disk, parent.direct[0], 1, entries)) < 0) {
+		return -1;
+	}
 
 	//return blk and clear inode
 	return_blk(inode->direct[0]);
