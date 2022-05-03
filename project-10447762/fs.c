@@ -981,34 +981,24 @@ static int fs_unlink(const char *path)
 	}
 	inode_bitmap[entries[entry_index].inode / 8] &= ~(1 << (entries[entry_index].inode % 8));
 	entries[entry_index].valid = 0;
-
-	//write the block bitmap back to the disk
 	if (disk->ops->write(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != SUCCESS){
 		free(block_bitmap);
 		free(inode_bitmap);
 		return -EIO;
 	}
 	free(block_bitmap);
-	//if this function returns an error beyond this point, only part of the updated data
-	//will have been written to the disk, and the file system will likely be corrupt.
-
-	//write the inode bitmap back to the disk
 	if (disk->ops->write(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		fprintf(stderr, "Error updating inode bitmap when deleting file '%s'. Disk is probably corrupt.\n", path);
 		return -EIO;
 	}
 	free(inode_bitmap);
-
-	//update the containing dir
 	if (disk->ops->write(disk, dir_inode.direct[0], 1, entries) != SUCCESS){
 		fprintf(stderr, "Error updating contents of directory '%s' when deleting '%s'. This directory is now corrupt.\n", temp_path, new_file_name);
 		return -EIO;
 	}
-
 	return 0;
 }
-
 
 /*
  * rmdir - remove a directory
@@ -1021,20 +1011,19 @@ static int fs_unlink(const char *path)
  *  	-ENOTDIR  - path not a directory
  *  	-ENOEMPTY - directory not empty
 */
+
 static int fs_rmdir(const char *path)
 {
 	if (path[0] == '\0'){
-		//if the path is "" somehow, then just return an error
 		return -EINVAL;
 	}
 	if (!strcmp(path, "/")){
-		//TODO: what to do when the user tries to remove the root?
 		return -ENOTEMPTY;
 	}
 	char temp_path[MAX_PATH];
 	char dir_name[FS_FILENAME_SIZE];
 	if (split_path(path, temp_path, dir_name) == -ENAMETOOLONG){
-		return -ENOENT; //if the filename is too long, then it can't exist
+		return -ENOENT;
 	}
 
 	int inode_num_of_containing_dir = inode_from_full_path(temp_path);
@@ -1042,13 +1031,12 @@ static int fs_rmdir(const char *path)
 		return -EIO;
 	}
 	if (inode_num_of_containing_dir < 0){
-		return inode_num_of_containing_dir; //either -ENOENT or -ENOTDIR
+		return inode_num_of_containing_dir;
 	}
 	struct fs_inode containing_dir_inode;
 	if (read_inode(inode_num_of_containing_dir, &containing_dir_inode) != 0){
 		return -EIO;
 	}
-	//make sure temp_path is a directory
 	if (!S_ISDIR(containing_dir_inode.mode)){
 		return -ENOTDIR;
 	}
@@ -1074,7 +1062,6 @@ static int fs_rmdir(const char *path)
 	if (!S_ISDIR(inode_of_dir_to_be_removed.mode)){
 		return -ENOTDIR;
 	}
-	//scan the directory to make sure it is empty
 	struct fs_dirent entries_of_dir_to_be_removed[DIRENTS_PER_BLK];
 	if (disk->ops->read(disk, inode_of_dir_to_be_removed.direct[0], 1, entries_of_dir_to_be_removed) != SUCCESS){
 		return -EIO;
@@ -1084,9 +1071,6 @@ static int fs_rmdir(const char *path)
 			return -ENOTEMPTY;
 		}
 	}
-	//dir to remove is empty
-
-	//now mark the data block as unused
 	char *block_bitmap = malloc(FS_BLOCK_SIZE * superblock.block_map_sz);
 	if (block_bitmap == NULL){
 		return -EIO;
@@ -1109,82 +1093,68 @@ static int fs_rmdir(const char *path)
 	}
 	inode_bitmap[entries[entry_index].inode / 8] &= ~(1 << (entries[entry_index].inode % 8));
 	entries[entry_index].valid = 0;
-
-	//write the block bitmap back to the disk
 	if (disk->ops->write(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != SUCCESS){
 		free(block_bitmap);
 		free(inode_bitmap);
 		return -EIO;
 	}
 	free(block_bitmap);
-	//if this function returns an error beyond this point, only part of the updated data
-	//will have been written to the disk, and the file system will likely be corrupt.
-
-	//write the inode bitmap back to the disk
 	if (disk->ops->write(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		fprintf(stderr, "Error updating inode bitmap when deleting directory '%s'. Disk is probably corrupt.\n", path);
 		return -EIO;
 	}
 	free(inode_bitmap);
-
-	//update the containing dir
 	if (disk->ops->write(disk, containing_dir_inode.direct[0], 1, entries) != SUCCESS){
 		fprintf(stderr, "Error updating contents of directory '%s' when deleting '%s'. This directory is now corrupt.\n", temp_path, dir_name);
 		return -EIO;
 	}
-
-
 	return 0;
 }
 
-
 /*
- * rename - rename a file or directory. You can assume the destination and the source share the same path-prefix
+ * rename - rename a file or directory. You can assume the destination 
+ * and the source share the same path-prefix so the renaming changes
+ * the name without moving the file or directory into another file or
+ * directory.
  *
- * Note that this is a simplified version of the UNIX rename
- * functionality - see 'man 2 rename' for full semantics. In
- * particular, the full version can move across directories, replace a destination file, and replace an empty directory with a full one.
  *  
- *  	@param src_path: the source path
- *  	@param dst_path: the destination path
+ *  @param src_path: the source path
+ *  @param dst_path: the destination path
  *
- *  	@return: 0 if successful, or -error number
- *  		-ENOENT   - source file or directory does not exist
- *  		-ENOTDIR  - component of source or target path not a directory
- *  		-EEXIST   - destination already exists
- *  		-EINVAL   - source and destination not in the same directory
+ *  @return: 0 if successful, or -error number
+ *  -ENOENT - source file or directory does not exist
+ *  -ENOTDIR - component of source or target path not a directory
+ *  -EEXIST - destination already exists
+ *  -EINVAL - source and destination not in the same directory
 */
 static int fs_rename(const char *src_path, const char *dst_path)
 {
 	if (src_path[0] == '\0' || dst_path[0] == '\0'){
-		//if either path is "" somehow, then just return an error
 		return -EINVAL;
 	}
 	if (!strcmp(src_path, "/") || !strcmp(dst_path, "/")){
-		//cannot rename to or from root dir
 		return -EINVAL;
 	}
 	char src_prefix[MAX_PATH];
 	char src_suffix[FS_FILENAME_SIZE];
 	if (split_path(src_path, src_prefix, src_suffix) == -ENAMETOOLONG){
-		return -ENOENT; //src path cannot already exist if it's name is too long
+		return -ENOENT; 
 	}
 	char dest_prefix[MAX_PATH];
 	char dest_suffix[FS_FILENAME_SIZE];
 	if (split_path(dst_path, dest_prefix, dest_suffix) == -ENAMETOOLONG){
-		return -ENAMETOOLONG; //cannot rename to a name that is too long
+		return -ENAMETOOLONG;
 	}
 	if (strcmp(src_prefix, dest_prefix)){
-		return -EINVAL; //prefixes do not match
+		return -EINVAL; 
 	}
-	//find inode of containing dir
 	int inode_num_of_containing_dir = inode_from_full_path(src_prefix);
 	if (inode_num_of_containing_dir == -1){
 		return -EIO;
 	}
 	if (inode_num_of_containing_dir < 0){
-		return inode_num_of_containing_dir; //either -ENOENT or -ENOTDIR
+		return inode_num_of_containing_dir;
 	}
 	struct fs_inode containing_dir_inode;
 	if (read_inode(inode_num_of_containing_dir, &containing_dir_inode) != 0){
@@ -1203,7 +1173,7 @@ static int fs_rename(const char *src_path, const char *dst_path)
 			continue;
 		}
 		if (!strcmp(entries[i].name, dest_suffix)){
-			return -EEXIST; //dest_suffix already exists
+			return -EEXIST;
 		}
 		if (entry_index == -1 && !strcmp(entries[i].name, src_suffix)){
 			entry_index = i;
@@ -1213,13 +1183,11 @@ static int fs_rename(const char *src_path, const char *dst_path)
 		return -ENOENT;
 	}
 	strcpy(entries[entry_index].name, dest_suffix);
-	//write the updated entries back to the disk
 	if (disk->ops->write(disk, containing_dir_inode.direct[0], 1, entries) != SUCCESS){
 		return -EIO;
 	}
 	return 0;
 }
-
 
 /*
  * chmod - change file permissions
@@ -1235,10 +1203,8 @@ static int fs_rename(const char *src_path, const char *dst_path)
 static int fs_chmod(const char *path, mode_t mode)
 {
 	if (path[0] == '\0'){
-		//if the path is "" somehow, then just return an error
 		return -EINVAL;
 	}
-	//unlike most of the other functions, this can be called on the root directory
 	int inode_num = inode_from_full_path(path);
 	if (inode_num == -1){
 		return -EIO;
@@ -1246,20 +1212,17 @@ static int fs_chmod(const char *path, mode_t mode)
 	if (inode_num < 0){
 		return inode_num;
 	}
-	//read the block that contains the new inode slot, modify the part of it that corresponds to
-	//this new inode, then write it back to the disk
 	int block_number_that_contains_inode = 1 + superblock.inode_map_sz + superblock.block_map_sz + (inode_num / INODES_PER_BLK);
 	struct fs_inode block_containing_inode[INODES_PER_BLK];
 	if (disk->ops->read(disk, block_number_that_contains_inode, 1, block_containing_inode) != SUCCESS){
 		return -EIO;
 	}
-	block_containing_inode[inode_num % INODES_PER_BLK].mode =(block_containing_inode[inode_num % INODES_PER_BLK].mode & ~0777) | (mode & 0777); //only update the permission bits of mode
+	block_containing_inode[inode_num % INODES_PER_BLK].mode =(block_containing_inode[inode_num % INODES_PER_BLK].mode & ~0777) | (mode & 0777);
 	if (disk->ops->write(disk, block_number_that_contains_inode, 1, block_containing_inode) != SUCCESS){
 		return -EIO;
 	}
 	return 0;
 }
-
 
 /*
  * Open a filesystem file or directory path.
@@ -1268,20 +1231,17 @@ static int fs_chmod(const char *path, mode_t mode)
  * @param fuse: file info data
  *
  * @return: 0 if successful, or -error number
- *	-ENOENT   - file does not exist
- *	-ENOTDIR  - component of path not a directory
+ *	-ENOENT - file does not exist
+ *	-ENOTDIR - component of path not a directory
 */
 static int fs_open(const char *path, struct fuse_file_info *fi)
 {
-	//Since read and write are passed the offset, no data needs to be stored between them
-	//fi does not need to be used, and this function just needs to make sure the
-	//file exists and is not a directory
 	int inode_num = inode_from_full_path(path);
 	if (inode_num == -1){
 		return -EIO;
 	}
 	if (inode_num < 0){
-		return inode_num; //either -ENOENT or -ENOTDIR
+		return inode_num;
 	}
 	struct fs_inode inode;
 	if (read_inode(inode_num, &inode) != 0){
@@ -1292,7 +1252,6 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
 	}
 	return 0;
 }
-
 
 /*
  * read - read data from an open file.
@@ -1319,7 +1278,7 @@ static int fs_read(const char *path, char *buf, size_t len, off_t offset,
 		return -EIO;
 	}
 	if (inode_num < 0){
-		return inode_num; //either -ENOENT or -ENOTDIR
+		return inode_num;
 	}
 	struct fs_inode inode;
 	if (read_inode(inode_num, &inode) != 0){
@@ -1337,27 +1296,22 @@ static int fs_read(const char *path, char *buf, size_t len, off_t offset,
 	}
 	size_t first_block_num = offset / FS_BLOCK_SIZE;
 	size_t last_block_num = (offset + len) / FS_BLOCK_SIZE;
-	//copy all the blocks into one contiguous chunk, then copy from there to buf
 	char *all_blocks = malloc((last_block_num - first_block_num + 1) * FS_BLOCK_SIZE);
 	if (all_blocks == NULL){
 		return -EIO;
 	}
 	int current_block_num = 0;
 	for (int i = first_block_num; i <= last_block_num; i++){
-		//figure out where block i is, then copy it to all_blocks
 		if (read_block_of_file(i, &inode, all_blocks + (current_block_num * FS_BLOCK_SIZE)) == -EIO){
 			free(all_blocks);
 			return -EIO;
 		}
 		current_block_num++;
 	}
-	//all_blocks now holds all the blocks that contain the requested data, now just copy
-	//the right amount from the right offset
 	memcpy(buf, all_blocks + (offset % FS_BLOCK_SIZE), len);
 	free(all_blocks);
 	return len;
 }
-
 
 /*
  * write - write data to a file
@@ -1373,15 +1327,13 @@ static int fs_read(const char *path, char *buf, size_t len, off_t offset,
  *	-ENOTDIR - component of path not a directory
  *	-EINVAL  - if 'offset' is greater than current file length. (POSIX semantics support the creation of files with "holes" in them, but we don't)
 */
-static int fs_write(const char *path, const char *buf, size_t len,
-		     off_t offset, struct fuse_file_info *fi)
-{
+static int fs_write(const char *path, const char *buf, size_t len, off_t offset, struct fuse_file_info *fi) {
 	int inode_num = inode_from_full_path(path);
 	if (inode_num == -1){
 		return -EIO;
 	}
 	if (inode_num < 0){
-		return inode_num; //either -ENOENT or -ENOTDIR
+		return inode_num;
 	}
 	struct fs_inode inode;
 	if (read_inode(inode_num, &inode) != 0){
@@ -1396,11 +1348,7 @@ static int fs_write(const char *path, const char *buf, size_t len,
 	if (len == 0){
 		return 0;
 	}
-	//if the file cannot be made any bigger (double indirect blocks are all full), return -EFBIG
-	const int MAX_FILE_SIZE = FS_BLOCK_SIZE * N_DIRECT
-		+ PTRS_PER_BLK * FS_BLOCK_SIZE
-		+ PTRS_PER_BLK * PTRS_PER_BLK * FS_BLOCK_SIZE;
-	//this constant is 67377152 with the current values N_DIRECT, FS_BLOCK_SIZE, and PTRS_PER_BLK
+	const int MAX_FILE_SIZE = FS_BLOCK_SIZE * N_DIRECT + PTRS_PER_BLK * FS_BLOCK_SIZE + PTRS_PER_BLK * PTRS_PER_BLK * FS_BLOCK_SIZE;
 	if (offset == MAX_FILE_SIZE){
 		if (len == 0){
 			return 0;
@@ -1408,30 +1356,20 @@ static int fs_write(const char *path, const char *buf, size_t len,
 			return -EFBIG;
 		}
 	}
-	//can't write past the end of the file
 	if (offset + len >= MAX_FILE_SIZE){
 		len = MAX_FILE_SIZE - offset;
 	}
 	uint32_t first_logical_block_num = offset / FS_BLOCK_SIZE;
-	//if len = 0, then last_logical_block_num could be less than first_logical_block_num
-	//however, the len == 0 case is checked above
 	uint32_t last_logical_block_num = (offset + len - 1) / FS_BLOCK_SIZE;
 	if (last_logical_block_num > N_DIRECT + PTRS_PER_BLK + PTRS_PER_BLK * PTRS_PER_BLK){
-		//files can't store this many blocks, so adjust last_logical_block_num and len
 		last_logical_block_num = N_DIRECT + PTRS_PER_BLK + PTRS_PER_BLK * PTRS_PER_BLK;
 		len = MAX_FILE_SIZE - offset;
 	}
-	//the first and last blocks are special because only part of the block should be written to
 	char first_block[FS_BLOCK_SIZE];
 	switch(read_block_of_file(first_logical_block_num, &inode, first_block)){
 	case -EIO:
 		return -EIO;
 	case -1:
-		/*
-		writing to the end of a file
-		This can only happen when offset is aligned to a block boundary. Therefore, I can just call
-		put_block_in_file with zeroes to make a new, empty block
-		*/
 		;
 		char empty_block[FS_BLOCK_SIZE];
 		memset(empty_block, 0, FS_BLOCK_SIZE);
@@ -1442,7 +1380,6 @@ static int fs_write(const char *path, const char *buf, size_t len,
 		memset(first_block, 0, FS_BLOCK_SIZE);
 		break;
 	case 0:
-		//don't do anything if the first block was successfully read
 		;
 	}
 	memcpy(first_block + offset % FS_BLOCK_SIZE, buf, (len <= FS_BLOCK_SIZE - offset % FS_BLOCK_SIZE) ? len : FS_BLOCK_SIZE - offset % FS_BLOCK_SIZE);
@@ -1453,7 +1390,6 @@ static int fs_write(const char *path, const char *buf, size_t len,
 		return -ENOSPC;
 	}
 	if (first_logical_block_num != last_logical_block_num){
-		//now write the in-between blocks
 		size_t offset_in_buf = FS_BLOCK_SIZE - offset % FS_BLOCK_SIZE; //amount written to the first block
 		for (int log_block = first_logical_block_num + 1; log_block <= last_logical_block_num - 1; log_block++){
 			int temp = put_block_in_file(&inode, log_block, (void*)(buf + offset_in_buf));
@@ -1462,7 +1398,6 @@ static int fs_write(const char *path, const char *buf, size_t len,
 			}
 			offset_in_buf += FS_BLOCK_SIZE;
 		}
-		//now write the last block of the file
 		char last_block[FS_BLOCK_SIZE];
 		switch(read_block_of_file(last_logical_block_num, &inode, last_block)){
 		case -EIO:
@@ -1516,16 +1451,13 @@ static int fs_write(const char *path, const char *buf, size_t len,
 */
 static int fs_release(const char *path, struct fuse_file_info *fi)
 {	
-	//Since read and write are passed the offset, no data needs to be stored between them
-	//fi does not need to be used, and this function just needs to make sure the
-	//file exists and is not a directory
-	//This is the same thing as fs_open, so I can just call that function
 	return fs_open(path, fi);
 }
 
 
 /*
- * statfs - get file system statistics. See 'man 2 statfs' for description of 'struct statvfs'.
+ * statfs - get file system statistics. See 'man 2 statfs' for 
+ * description of 'struct statvfs'.
  *
  * @param path: the path to the file
  * @param st: pointer to the destination statvfs struct
@@ -1575,32 +1507,23 @@ static int fs_statfs(const char *path, struct statvfs *st)
 	st->f_files = superblock.inode_region_sz * INODES_PER_BLK;
 	st->f_ffree = available_inodes;
 	st->f_namemax = FS_FILENAME_SIZE;
-
-	//it seems like any irrelevant fields of st should just be set to 0
 	st->f_fsid = 0;
 	st->f_frsize = 0;
 	st->f_flag = 0;
-
-
-	//https://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201109/homework/fuse/fuse_doc.html#readdir-details
-	//this part of the FUSE documentation says that the path passed into this function can usually
-	//be ignored, so that is what I'm doing, and why I'm not bothering to check for -ENOENT or -ENOTDIR
 	return 0;
 }
 
-//placeholder function to prevent main.c from crashing whenever fsops.utime() is called
 static int fs_utime(const char *path, struct utimbuf *timebuf){
 	return -ENOSYS;
 }
 
-//placeholder function to prevent main.c from crashing whenever fsops.truncate() is called
 static int fs_truncate(const char *path, off_t offset){
 	return -ENOSYS;
 }
 
 /**
  * Operations vector. Please don't rename it, as the
- * skeleton code in misc.c assumes it is named 'fs_ops'.
+ * skeleton code in main.c assumes it is named 'fs_ops'.
  */
 struct fuse_operations fs_ops = {
     .init = fs_init,
@@ -1619,9 +1542,6 @@ struct fuse_operations fs_ops = {
     .write = fs_write,
     .release = fs_release,
     .statfs = fs_statfs,
-	.utime = fs_utime, //added to stop certain commands from crashing main.c
-	.truncate = fs_truncate, //added to stop the truncate command from crashing main.c
+	.utime = fs_utime, 
+	.truncate = fs_truncate,
 };
-
-
-/*#pragma clang diagnostic pop*/
