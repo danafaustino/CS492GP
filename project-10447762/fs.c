@@ -413,11 +413,11 @@ static struct fs_super sb;
 //checks the bitmap to see if a given inode number is valid
 //could return -1 if reading from the disk fails
 static int inode_is_used(int inode_num){
-	char *inode_bitmap = malloc(FS_BLOCK_SIZE * superblock.inode_map_sz);
+	char *inode_bitmap = malloc(FS_BLOCK_SIZE * sb.inode_map_sz);
 	if (inode_bitmap == NULL){
 		return -1;
 	}
-	if (disk->ops->read(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
+	if (disk->ops->read(disk, 1, sb.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		return -1;
 	}
@@ -429,7 +429,7 @@ static int inode_is_used(int inode_num){
 //before calling this function, make sure that inode_num is used by calling inode_is_used
 static int read_inode(int inode_num, struct fs_inode* buf){
 	char temp_block[FS_BLOCK_SIZE];
-	int block_number = 1 + superblock.inode_map_sz + superblock.block_map_sz + inode_num / INODES_PER_BLK;
+	int block_number = 1 + sb.inode_map_sz + sb.block_map_sz + inode_num / INODES_PER_BLK;
 	if(disk->ops->read(disk, block_number, 1, temp_block) != SUCCESS){
 		return -1;
 	}
@@ -474,7 +474,7 @@ static int inode_from_full_path(const char *path){
 	int number_of_path_components = split(temp_path, NULL, 0, "/");
 	if (number_of_path_components == 0){
 		//path is just "/", so return inode of root directory
-		return superblock.root_inode;
+		return sb.root_inode;
 	}
 	char** path_components = malloc(number_of_path_components * sizeof(char*));
 	split(temp_path, path_components, number_of_path_components, "/");
@@ -618,16 +618,16 @@ int write_block_to_file(uint32_t block_number, struct fs_inode *inode, void *buf
 
 //returns a block number on success, or -ENOSPC or -EIO on failure
 static int allocate_zeroed_block(){
-	char *block_bitmap = malloc(FS_BLOCK_SIZE * superblock.block_map_sz);
+	char *block_bitmap = malloc(FS_BLOCK_SIZE * sb.block_map_sz);
 	if (block_bitmap == NULL){
 		return -EIO;
 	}
-	if (disk->ops->read(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != SUCCESS){
+	if (disk->ops->read(disk, 1 + sb.inode_map_sz, sb.block_map_sz, block_bitmap) != SUCCESS){
 		free(block_bitmap);
 		return -EIO;
 	}
 	int new_block_num = -1;
-	for (int i = 0; i < superblock.num_blocks; i++){
+	for (int i = 0; i < sb.num_blocks; i++){
 		if (!(block_bitmap[i/8] & (1 << (i % 8)))){
 			new_block_num = i;
 			break;
@@ -645,7 +645,7 @@ static int allocate_zeroed_block(){
 		return -EIO;
 	}
 	block_bitmap[new_block_num / 8] |= 1 << (new_block_num % 8);
-	if (disk->ops->write(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != SUCCESS){
+	if (disk->ops->write(disk, 1 + sb.inode_map_sz, sb.block_map_sz, block_bitmap) != SUCCESS){
 		free(block_bitmap);
 		return -EIO;
 	}
@@ -1070,15 +1070,15 @@ static int fs_mkdir(const char *path, mode_t mode)
 		return -ENOSPC;
 	}
 	int new_inode_num = -1;
-	char *inode_bitmap = malloc(FS_BLOCK_SIZE * superblock.inode_map_sz);
+	char *inode_bitmap = malloc(FS_BLOCK_SIZE * sb.inode_map_sz);
 	if (inode_bitmap == NULL){
 		return -EIO;
 	}
-	if (disk->ops->read(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
+	if (disk->ops->read(disk, 1, sb.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		return -EIO;
 	}
-	for (int i = 0; i < INODES_PER_BLK * superblock.inode_region_sz; i++){
+	for (int i = 0; i < INODES_PER_BLK * sb.inode_region_sz; i++){
 		if (!(inode_bitmap[i / 8] & (1 << (i % 8)))){
 			new_inode_num = i;
 			break;
@@ -1106,17 +1106,17 @@ static int fs_mkdir(const char *path, mode_t mode)
 	}
 	//find a new block for this dir's entries
 	int new_block_num = -1;
-	char *block_bitmap = malloc(FS_BLOCK_SIZE * superblock.block_map_sz);
+	char *block_bitmap = malloc(FS_BLOCK_SIZE * sb.block_map_sz);
 	if (block_bitmap == NULL){
 		free(inode_bitmap);
 		return -EIO;
 	}
-	if (disk->ops->read(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != SUCCESS){
+	if (disk->ops->read(disk, 1 + sb.inode_map_sz, sb.block_map_sz, block_bitmap) != SUCCESS){
 		free(block_bitmap);
 		free(inode_bitmap);
 		return -EIO;
 	}
-	for (int i = 0; i < superblock.num_blocks; i++){
+	for (int i = 0; i < sb.num_blocks; i++){
 		if (!(block_bitmap[i / 8] & (1 << (i % 8)))){
 			new_block_num = i;
 			break;
@@ -1129,7 +1129,7 @@ static int fs_mkdir(const char *path, mode_t mode)
 	}
 	//now mark that block as used in the bitmap
 	block_bitmap[new_block_num / 8] |= 1 << (new_block_num % 8);
-	if (disk->ops->write(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != SUCCESS){
+	if (disk->ops->write(disk, 1 + sb.inode_map_sz, sb.block_map_sz, block_bitmap) != SUCCESS){
 		free(block_bitmap);
 		free(inode_bitmap);
 		return -EIO;
@@ -1141,7 +1141,7 @@ static int fs_mkdir(const char *path, mode_t mode)
 
 	//now mark new_inode_num as used in the bitmap
 	inode_bitmap[new_inode_num / 8] |= 1 << (new_inode_num % 8);
-	if (disk->ops->write(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
+	if (disk->ops->write(disk, 1, sb.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		return -EIO;
 	}
@@ -1161,7 +1161,7 @@ static int fs_mkdir(const char *path, mode_t mode)
 	//read the block that contains the new inode slot, modify the part of it that corresponds to
 	//this new inode, then write it back to the disk
 	int block_number_that_contains_new_inode =
-		1 + superblock.inode_map_sz + superblock.block_map_sz
+		1 + sb.inode_map_sz + sb.block_map_sz
 		+ (new_inode_num / INODES_PER_BLK);
 	struct fs_inode block_containing_new_inode[INODES_PER_BLK];
 	if (disk->ops->read(disk, block_number_that_contains_new_inode, 1, block_containing_new_inode) != SUCCESS){
@@ -1174,7 +1174,6 @@ static int fs_mkdir(const char *path, mode_t mode)
 	}
 	//now, update the directory containing this file to have an entry for the new file
 	entries[entry_index].valid = 1;
-	entries[entry_index].isDir = 1;
 	entries[entry_index].inode = new_inode_num;
 	strcpy(entries[entry_index].name, new_dir_name);
 	if (disk->ops->write(disk, containing_dir_inode.direct[0], 1, entries) != SUCCESS){
@@ -1403,22 +1402,22 @@ static int fs_rmdir(const char *path)
 	//dir to remove is empty
 
 	//now mark the data block as unused
-	char *block_bitmap = malloc(FS_BLOCK_SIZE * superblock.block_map_sz);
+	char *block_bitmap = malloc(FS_BLOCK_SIZE * sb.block_map_sz);
 	if (block_bitmap == NULL){
 		return -EIO;
 	}
-	if (disk->ops->read(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != 0){
+	if (disk->ops->read(disk, 1 + sb.inode_map_sz, sb.block_map_sz, block_bitmap) != 0){
 		free(block_bitmap);
 		return -EIO;
 	}
 	unset_block_bit(inode_of_dir_to_be_removed.direct[0], block_bitmap);
 	
-	char *inode_bitmap = malloc(FS_BLOCK_SIZE * superblock.inode_map_sz);
+	char *inode_bitmap = malloc(FS_BLOCK_SIZE * sb.inode_map_sz);
 	if (inode_bitmap == NULL){
 		free(block_bitmap);
 		return -EIO;
 	}
-	if (disk->ops->read(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
+	if (disk->ops->read(disk, 1, sb.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		free(block_bitmap);
 		return -EIO;
@@ -1427,7 +1426,7 @@ static int fs_rmdir(const char *path)
 	entries[entry_index].valid = 0;
 
 	//write the block bitmap back to the disk
-	if (disk->ops->write(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != SUCCESS){
+	if (disk->ops->write(disk, 1 + sb.inode_map_sz, sb.block_map_sz, block_bitmap) != SUCCESS){
 		free(block_bitmap);
 		free(inode_bitmap);
 		return -EIO;
@@ -1437,7 +1436,7 @@ static int fs_rmdir(const char *path)
 	//will have been written to the disk, and the file system will likely be corrupt.
 
 	//write the inode bitmap back to the disk
-	if (disk->ops->write(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
+	if (disk->ops->write(disk, 1, sb.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		fprintf(stderr, "Error updating inode bitmap when deleting directory '%s'. Disk is probably corrupt.\n", path);
 		return -EIO;
