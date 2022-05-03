@@ -64,7 +64,7 @@ static int image_num_blocks(struct blkdev *dev)
 static int image_read(struct blkdev *dev, int first_blk, int nblks, void *buf)
 {
 	struct image_dev* image_device = dev->private;
-	if (image_device->fd == -1) {
+	if (image_device->fd == -1){
 		//this image device is not open
 		return E_UNAVAIL;
 	}
@@ -72,7 +72,7 @@ static int image_read(struct blkdev *dev, int first_blk, int nblks, void *buf)
 	//seek to the right point in it (first_blk * BLOCK_SIZE), then read the specified amount
 	//from it (nblks * BLOCK_SIZE), and store it in buf
 	off_t seek_result = lseek(image_device->fd, first_blk * BLOCK_SIZE, SEEK_SET);
-	if (seek_result == -1) {
+	if (seek_result == -1){
 		//seek failed, return one of the errors specified in blkdev.h
 		//I'll go with E_SIZE for now
 		fprintf(stderr, "image_read: seek failed\n");
@@ -80,12 +80,12 @@ static int image_read(struct blkdev *dev, int first_blk, int nblks, void *buf)
 	}
 	int amount_to_try_to_read = nblks * BLOCK_SIZE;
 	ssize_t amount_actually_read = read(image_device->fd, buf, amount_to_try_to_read);
-	if (amount_actually_read == -1) {
+	if (amount_actually_read == -1){
 		//read failed, return one of the errors specified in blkdev.h
 		//I'll go with E_BADADDR for now
 		return E_BADADDR;
 	}
-	if (amount_actually_read < amount_to_try_to_read) {
+	if (amount_actually_read < amount_to_try_to_read){
 		//could not read all the data specified, return one of the error codes in blkdev.h
 		//I'll go with E_SIZE for now
 		fprintf(stderr, "image_read: could not read all %d bytes, only read %zd bytes\n", amount_to_try_to_read, amount_actually_read);
@@ -106,20 +106,20 @@ static int image_read(struct blkdev *dev, int first_blk, int nblks, void *buf)
 static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 {
 	struct image_dev* image_device = dev->private;
-	if (image_device->fd == -1) {
+	if (image_device->fd == -1){
 		//this image device is not open
 		return E_UNAVAIL;
 	}
-	if (lseek(image_device->fd, first_blk * BLOCK_SIZE, SEEK_SET) == -1) {
+	if (lseek(image_device->fd, first_blk * BLOCK_SIZE, SEEK_SET) == -1){
 		fprintf(stderr, "image_write: seek failed\n");
 		return E_SIZE;
 	}
 	int amount_to_try_to_write = nblks * BLOCK_SIZE;
 	ssize_t amount_actually_written = write(image_device->fd, buf, amount_to_try_to_write);
-	if (amount_actually_written == -1) {
+	if (amount_actually_written == -1){
 		return E_BADADDR;
 	}
-	if (amount_actually_written < amount_to_try_to_write) {
+	if (amount_actually_written < amount_to_try_to_write){
 		fprintf(stderr, "image_read: could not write all %d bytes, only wrote %zd bytes\n", amount_to_try_to_write, amount_actually_written);
 		return E_SIZE;
 	}
@@ -139,11 +139,11 @@ static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 	//The linux fsync function just flushes the entire file, so I won't
 	//do anything with first_blk and nblks
 	struct image_dev* image_device = dev->private;
-	if (image_device->fd == -1) {
+	if (image_device->fd == -1){
 		//this image device is not open
 		return E_UNAVAIL;
 	}
-	if (fsync(image_device->fd) == -1) {
+	if (fsync(image_device->fd) == -1){
 		//Not quite sure which error to return here
 		return E_UNAVAIL;
 	}
@@ -158,11 +158,11 @@ static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 static void image_close(struct blkdev *dev)
 {
 	struct image_dev *image_device = dev->private;
-	if (image_device->fd == -1) {
+	if (image_device->fd == -1){
 		//this image device is not open
 		return;
 	}
-	if (close(image_device->fd) == -1) {
+	if (close(image_device->fd) == -1){
 		return;
 	}
 	//apparently, this function doesn't need to return success/failure
@@ -197,14 +197,14 @@ struct blkdev *image_create(char *path)
     
     /* open image device */
     im->fd = open(path, O_RDWR);
-    if (im->fd < 0) {
+    if (im->fd < 0){
         fprintf(stderr, "can't open image %s: %s\n", path, strerror(errno));
         return NULL;
     }
 
     /* access image device */
     struct stat sb;
-    if (fstat(im->fd, &sb) < 0) {
+    if (fstat(im->fd, &sb) < 0){
         fprintf(stderr, "can't access image %s: %s\n", path, strerror(errno));
         return NULL;
     }
@@ -213,7 +213,7 @@ struct blkdev *image_create(char *path)
      * this isn't a fatal error, as extra bytes beyond the last full
      * block will be ignored by read and write.
      */
-    if (sb.st_size % BLOCK_SIZE != 0) {
+    if (sb.st_size % BLOCK_SIZE != 0){
         fprintf(stderr, "warning: file %s not a multiple of %d bytes\n",
                 path, BLOCK_SIZE);
     }
@@ -232,7 +232,7 @@ void image_fail(struct blkdev *dev)
 {
     struct image_dev *im = dev->private;
 
-    if (im->fd != -1) {
+    if (im->fd != -1){
         close(im->fd);
     }
     im->fd = -1;

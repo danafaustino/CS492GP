@@ -51,7 +51,7 @@ int homework_part;
  */
 enum { MAX_PATH = 4096 };
 
-static void help() {
+static void help(){
     printf("Arguments:\n");
     printf(" -cmdline : Enter an interactive REPL that provides a filesystem view into the image\n");
     printf(" -image <name.img> : Use the provided image file that contains the filesystem\n");
@@ -110,23 +110,23 @@ static char *strmode(char *buf, int mode)
  */
 static int split(char *p, char *toks[], int n, char *delim)
 {
-    if (n == 0) {
+    if (n == 0){
         n = INT_MAX;
     }
-    if (toks == NULL) {
+    if (toks == NULL){
         // do not alter p if not returning names
         p = strdup(p);
     }
     char *str;
     char *lasts = NULL;
     int i;
-    for (i = 0; i < n && (str = strtok_r(p, delim, &lasts)) != NULL; i++) {
+    for (i = 0; i < n && (str = strtok_r(p, delim, &lasts)) != NULL; i++){
         p = NULL;
-        if (toks != NULL) {
+        if (toks != NULL){
             toks[i] = str;
         }
     }
-    if (toks == NULL) {
+    if (toks == NULL){
         free(p);
     }
     return i;
@@ -144,10 +144,10 @@ static char cwd[MAX_PATH];
 static void update_cwd(char *paths[], int npaths)
 {
     char *p = cwd;
-    if (npaths == 0) {
+    if (npaths == 0){
         strcpy(cwd,"/");
     } else {
-        for (int i = 0; i < npaths; i++) {
+        for (int i = 0; i < npaths; i++){
             p += sprintf(p, "/%s", paths[i]);
         }
     }
@@ -169,15 +169,15 @@ static const char *get_cwd(void)
  * @param nnames the number of elements
  * @param the new nnames value after normalization
  */
-static int normalize_paths(char *names[], int nnames) {
+static int normalize_paths(char *names[], int nnames){
     int dest = 0;
-    for (int src = 0; src < nnames; src++) {
-        if (strcmp(names[src],".") == 0) {
+    for (int src = 0; src < nnames; src++){
+        if (strcmp(names[src],".") == 0){
             // ignore current directory path element
-        } else if (strcmp(names[src], "..") == 0) {
+        } else if (strcmp(names[src], "..") == 0){
             if (dest > 0) dest--;  // back up one directory element
         } else {  // add directory element
-            if (dest < src) {
+            if (dest < src){
                 strcpy(names[dest], names[src]);
             }
             dest++;
@@ -195,10 +195,10 @@ static int normalize_paths(char *names[], int nnames) {
  * @param pathbuf result path buffer must be MAX_PATH length
  * @return pointer to path buffer
  */
-static char *full_path(const char *path, char *pathbuf) {
+static char *full_path(const char *path, char *pathbuf){
     // split into path elements and normalize path
     char tmp_path[MAX_PATH];
-    if (*path == '/') {
+    if (*path == '/'){
         strcpy(tmp_path, path);
     } else {
         sprintf(tmp_path, "%s/%s", get_cwd(), path);
@@ -210,12 +210,12 @@ static char *full_path(const char *path, char *pathbuf) {
     split(tmp_path, names, npaths, "/");	// split into path names
 
     npaths = normalize_paths(names, npaths);
-    if (npaths == 0) {
+    if (npaths == 0){
         strcpy(pathbuf, "/");
     } else {
         // append path elements into pathbuf
         char *bufp = pathbuf;
-        for (int i = 0; i < npaths; i++) {
+        for (int i = 0; i < npaths; i++){
             bufp += sprintf(bufp, "/%s", names[i]);
         }
     }
@@ -234,8 +234,8 @@ static int do_cd1(char *argv[])
     struct stat sb;
     char pathbuf[MAX_PATH];
     int retval = fs_ops.getattr(full_path(argv[0], pathbuf), &sb);
-    if (retval == 0) {
-        if (S_ISDIR(sb.st_mode)) {
+    if (retval == 0){
+        if (S_ISDIR(sb.st_mode)){
             int nnames = split(pathbuf, NULL, 0, "/");  // get count
             char **names = malloc(nnames * sizeof(char*));
 
@@ -291,7 +291,7 @@ static void print_ls(void)
 {
     int i;
     qsort(lsbuf, lsi, MAX_PATH, (void*)strcmp);
-    for (i = 0; i < lsi; i++) {
+    for (i = 0; i < lsi; i++){
         printf("%s", lsbuf[i]);
     }
 }
@@ -308,7 +308,7 @@ int do_ls1(char *argv[])
     struct fuse_file_info info;
     memset(&info, 0, sizeof(struct fuse_file_info));
     int retval;
-    if ((retval = fs_ops.opendir(pathbuf, &info)) == 0) {
+    if ((retval = fs_ops.opendir(pathbuf, &info)) == 0){
         init_ls();
         retval = fs_ops.readdir(pathbuf, NULL, filler, 0, &info);
         print_ls();
@@ -354,12 +354,12 @@ static int _lsdashl(const char *path)
     char pathbuf[MAX_PATH];
     full_path(path, pathbuf);
     int retval = fs_ops.getattr(pathbuf, &sb);
-    if (retval == 0) {
+    if (retval == 0){
         init_ls();
         struct fuse_file_info info;
         memset(&info, 0, sizeof(struct fuse_file_info));
-        if (S_ISDIR(sb.st_mode)) {
-            if ((retval = fs_ops.opendir(pathbuf, &info)) == 0) {
+        if (S_ISDIR(sb.st_mode)){
+            if ((retval = fs_ops.opendir(pathbuf, &info)) == 0){
                 /* read directory information */
                 retval = fs_ops.readdir(pathbuf, NULL, dashl_filler, 0, &info);
             }
@@ -482,22 +482,22 @@ static int do_put(char *argv[])
     char path[MAX_PATH];
     int len, fd, offset = 0, val;
 
-    if ((fd = open(outside, O_RDONLY, 0)) < 0) {
+    if ((fd = open(outside, O_RDONLY, 0)) < 0){
         return fd;
     }
     full_path(inside, path);
-    if ((val = fs_ops.mknod(path, 0777 | S_IFREG, 0)) != 0) {
+    if ((val = fs_ops.mknod(path, 0777 | S_IFREG, 0)) != 0){
         return val;
     }
 
     struct fuse_file_info info;
     memset(&info, 0, sizeof(struct fuse_file_info));
-    if ((val = fs_ops.open(path, &info)) != 0) {
+    if ((val = fs_ops.open(path, &info)) != 0){
         return val;
     }
-    while ((len = read(fd, blkbuf, blksiz)) > 0) {
+    while ((len = read(fd, blkbuf, blksiz)) > 0){
         val = fs_ops.write(path, blkbuf, len, offset, &info);
-        if (val != len) {
+        if (val != len){
             break;
         }
         offset += len;
@@ -532,21 +532,21 @@ static int do_get(char *argv[])
     char path[MAX_PATH];
     int len, fd, offset = 0;
 
-    if ((fd = open(outside, O_WRONLY|O_CREAT|O_TRUNC, 0777)) < 0) {
+    if ((fd = open(outside, O_WRONLY|O_CREAT|O_TRUNC, 0777)) < 0){
         return fd;
     }
     full_path(inside, path);
     struct fuse_file_info info;
     memset(&info, 0, sizeof(struct fuse_file_info));
     int val;
-    if ((val = fs_ops.open(path, &info)) != 0) {
+    if ((val = fs_ops.open(path, &info)) != 0){
         return val;
     }
-    while (1) {
+    while (1){
         len = fs_ops.read(path, blkbuf, blksiz, offset, &info);
-        if (len >= 0) {
+        if (len >= 0){
             len = write(fd, blkbuf, len);
-            if (len <= 0) {
+            if (len <= 0){
                 break;
             }
             offset += len;
@@ -584,10 +584,10 @@ static int do_show(char *argv[])
     struct fuse_file_info info;
     memset(&info, 0, sizeof(struct fuse_file_info));
     int val;
-    if ((val = fs_ops.open(path, &info)) != 0) {
+    if ((val = fs_ops.open(path, &info)) != 0){
         return val;
     }
-    while ((len = fs_ops.read(path, blkbuf, blksiz, offset, &info)) > 0) {
+    while ((len = fs_ops.read(path, blkbuf, blksiz, offset, &info)) > 0){
         fwrite(blkbuf, len, 1, stdout);
         offset += len;
     }
@@ -604,7 +604,7 @@ static int do_statfs(char *argv[])
 {
     struct statvfs st;
     int retval = fs_ops.statfs("/", &st);
-    if (retval == 0) {
+    if (retval == 0){
         printf("block size: %lu\n", st.f_bsize);
         printf("no. blocks: %ju\n", st.f_blocks);
         printf("avail blocks: %ju\n", st.f_bavail);
@@ -623,7 +623,7 @@ static int do_stat(char *argv[])
 {
     struct stat sb;
     int retval = fs_ops.getattr(argv[0], &sb);
-    if (retval == 0) {
+    if (retval == 0){
         char mode[16], time[26], *lasts;
         printf("%5jd %s %2jd %4d %4d %8jd %s %s\n",
                sb.st_blocks, strmode(mode, sb.st_mode),
@@ -641,7 +641,7 @@ static int do_stat(char *argv[])
 static void _blksiz(int size)
 {
     blksiz = size;	// record new block size
-    if (blkbuf) {	// free old block buffer
+    if (blkbuf){	// free old block buffer
         free(blkbuf);
     }
     blkbuf = malloc(blksiz);	// create new block buffer
@@ -699,7 +699,7 @@ static int do_touch(char *argv[])
     full_path(argv[0], path);
     // try creating new file
     int status = fs_ops.mknod(path, 0777 | S_IFREG, 0);
-    if (status == -EEXIST) {
+    if (status == -EEXIST){
         // if exists, modify its access/mod time to now
         struct utimbuf ut;
         ut.actime = ut.modtime = time(NULL);
@@ -750,12 +750,12 @@ static int cmdloop(void)
 
     update_cwd(NULL, 0);
 
-    while (true) {
+    while (true){
         printf("cmd> "); fflush(stdout);
         if (fgets(line, sizeof(line), stdin) == NULL)
             break;
 
-        if (!isatty(0)) {
+        if (!isatty(0)){
             printf("%s", line);
         }
 
@@ -768,33 +768,33 @@ static int cmdloop(void)
         int i, nargs = split(line, args, 10, " \t\r\n");
 
         // continue if empty line
-        if (nargs == 0) {
+        if (nargs == 0){
             continue;
         }
 
         // quit if command is "quit" or "exit"
-        if ((strcmp(args[0], "quit") == 0) || (strcmp(args[0], "exit") == 0)) {
+        if ((strcmp(args[0], "quit") == 0) || (strcmp(args[0], "exit") == 0)){
             break;
         }
 
         // provide help if command is "help" or "?"
-        if ((strcmp(args[0], "help") == 0) || (strcmp(args[0], "?") == 0)) {
-            for (i = 0; cmds[i].name != NULL; i++) {
+        if ((strcmp(args[0], "help") == 0) || (strcmp(args[0], "?") == 0)){
+            for (i = 0; cmds[i].name != NULL; i++){
                 printf("%s\n", cmds[i].help);
             }
             continue;
         }
 
         // validate command and arguments
-        for (i = 0; cmds[i].name != NULL; i++) {
-            if ((strcmp(args[0], cmds[i].name) == 0) && (nargs == cmds[i].nargs+1)) {
+        for (i = 0; cmds[i].name != NULL; i++){
+            if ((strcmp(args[0], cmds[i].name) == 0) && (nargs == cmds[i].nargs+1)){
                 break;
             }
         }
 
         // if command not recognized or incorrect arg count
-        if (cmds[i].name == NULL) {
-            if (nargs > 0) {
+        if (cmds[i].name == NULL){
+            if (nargs > 0){
                 printf("bad command: %s\n", args[0]);
             }
             continue;
@@ -802,7 +802,7 @@ static int cmdloop(void)
 
         // process command
         int err = cmds[i].f(&args[1]);
-        if (err != 0) {
+        if (err != 0){
             printf("error: %s\n", strerror(-err));
         }
     }
@@ -820,10 +820,10 @@ static int cmdloop(void)
  * @param argc the number of parameters
  * @param argv the parameter values
  */
-static void fixup(int argc, char *argv[]) {
-    for (int i = 0; i < argc; i++) {
+static void fixup(int argc, char *argv[]){
+    for (int i = 0; i < argc; i++){
         int len = strlen(argv[i]);
-        if (argv[i][0] == '\'' && argv[i][len-1] == '\'') {
+        if (argv[i][0] == '\'' && argv[i][len-1] == '\''){
             argv[i][len-1] = '\0';
             argv[i]++;
         }
@@ -837,25 +837,25 @@ int main(int argc, char **argv)
     /* Argument processing and checking
      */
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-    if (fuse_opt_parse(&args, &_data, opts, NULL) == -1) {
+    if (fuse_opt_parse(&args, &_data, opts, NULL) == -1){
         help();
         exit(1);
     }
 
-    if (_data.image_name == 0) {
+    if (_data.image_name == 0){
         fprintf(stderr, "You must provide an image\n");
         help();
         exit(1);
     }
 
     char *file = _data.image_name;
-    if (strcmp(file+strlen(file)-4, ".img") != 0) {
+    if (strcmp(file+strlen(file)-4, ".img") != 0){
         fprintf(stderr, "bad image file (must end in .img): %s\n", file);
         help();
         exit(1);
     }
 
-    if ((disk = image_create(file)) == NULL) {
+    if ((disk = image_create(file)) == NULL){
         fprintf(stderr, "cannot open image file '%s': %s\n", file, strerror(errno));
         help();
         exit(1);
@@ -864,7 +864,7 @@ int main(int argc, char **argv)
 //    homework_part = _data.part;
     homework_part = 2; // PJG
 
-    if (_data.cmd_mode) {  /* process interactive commands */
+    if (_data.cmd_mode){  /* process interactive commands */
         fs_ops.init(NULL);
         _blksiz(FS_BLOCK_SIZE);
         cmdloop();
