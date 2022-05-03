@@ -107,19 +107,25 @@ static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 		return E_UNAVAIL;
 	}
 
-	if ((first_blk < 0) || (first_blk + nblks > img->nblks)) {		// Check for invalid address		
-		return E_BADADDR;		
-	} 
-
 	if (first_blk == 0) {
 		printf("WARNING: Writing to superblock (block 0).");		// Warning message when writing to the superblock
 	}
 
-	int offset = first_blk * BLOCK_SIZE;
-	int val = pwrite(img->fd, buf, size, offset);
+	// if (lseek(img->fd, first_blk * BLOCK_SIZE, SEEK_SET) == -1) {
+	// 	fprintf(stderr, "Error: Seek failed\n");
+	// 	return E_SIZE;
+	// }
 
-	if (val != size) {
-		return E_BADADDR;			// Return error when write fails
+	int write_attempt = nblks * BLOCK_SIZE;
+	ssize_t write_actual = write(img->fd, buf, write_attempt);
+
+	if (write_actual == -1) {
+		return E_BADADDR;
+	}
+
+	if (write_actual < write_attempt) {
+		fprintf(stderr, "Error: Failed to write all %d bytes, only wrote %zd bytes\n", write_attempt, write_actual);
+		return E_SIZE;
 	}
 
 	return SUCCESS;
@@ -141,7 +147,7 @@ static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 	struct image_dev *img = dev->private;
 
 	/* Check whether the device is unavailable */
-	if (img->fd == -1) {
+	if ((img->fd == -1) || (fsync(img->fd) == -1)) {
 		return E_UNAVAIL;
 	}
 
