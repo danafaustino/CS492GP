@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <limits.h>		// Added for INT_MAX
 
 #include "fsx492.h"
 #include "blkdev.h"
