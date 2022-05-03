@@ -20,4 +20,5 @@
 */
 extern struct blkdev *image_create(char *path);
 
+
 #endif /* IMAGE_H_ */
