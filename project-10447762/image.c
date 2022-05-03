@@ -38,14 +38,8 @@ struct image_dev {
 */
 static int image_num_blocks(struct blkdev *dev)
 {
-	//CS492: your code here
-	struct image_dev *img = dev->private;
-
-	if (!img || !(img->nblks)) {		// Check if img or nblks are NULL
-		return E_BADADDR;				// If either are NULL, return bad address
-	}
-	
-	return img->nblks;		// Otherwise, return the number of blocks in the block device
+	struct image_dev* temp = dev->private;
+	return temp->nblks;
 }
 
 
@@ -59,27 +53,26 @@ static int image_num_blocks(struct blkdev *dev)
 */
 static int image_read(struct blkdev *dev, int first_blk, int nblks, void *buf)
 {
-	struct image_dev *im = dev->private;
+	struct image_dev *image_device = dev->private;
 
 	/* Check whether the disk is unavailable */
-	if (im->fd == -1) {
+	if (image_device->fd == -1) {
 		return E_UNAVAIL;
 	}
 
-	assert(first_blk >= 0 && first_blk+nblks <= im->nblks);
-
-	int result = pread(im->fd, buf, nblks*BLOCK_SIZE, first_blk*BLOCK_SIZE);
-
-	/* Since we already checked the address, this shouldn't
-	 * happen very often.
-	 */
-	if (result < 0) {
-		fprintf(stderr, "read error on %s: %s\n", im->path, strerror(errno));
-		assert(0);
+	off_t seek_result = lseek(image_device->fd, first_blk * BLOCK_SIZE, SEEK_SET);
+	if (seek_result == -1) {
+		fprintf(stderr, "image_read: seek failed\n");
+		return E_SIZE;
 	}
-	if (result != nblks*BLOCK_SIZE) {
-		fprintf(stderr, "short read on %s: %s\n", im->path, strerror(errno));
-		assert(0);
+	int tried_read = nblks * BLOCK_SIZE;
+	ssize_t actually_read = read(image_device->fd, buf, tried_read);
+	if (actually_read == -1) {
+		return E_BADADDR;
+	}
+	if (actually_read < tried_read) {
+		fprintf(stderr, "image_read: Only read %zd bytes out of %d bytes\n", tried_read, actually_read);
+		return E_SIZE;
 	}
 	return SUCCESS;
 }
@@ -98,36 +91,23 @@ static int image_read(struct blkdev *dev, int first_blk, int nblks, void *buf)
 */
 static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 {
-	//CS492: your code here
-	struct image_dev *img = dev->private;
-	int size = nblks * BLOCK_SIZE;
-
-	/* Check whether the device is unavailable */
-	if (img->fd == -1) {
+	struct image_dev* image_device = dev->private;
+	if (image_device->fd == -1) {
 		return E_UNAVAIL;
 	}
-
-	if (first_blk == 0) {
-		printf("WARNING: Writing to superblock (block 0).");		// Warning message when writing to the superblock
-	}
-
-	// if (lseek(img->fd, first_blk * BLOCK_SIZE, SEEK_SET) == -1) {
-	// 	fprintf(stderr, "Error: Seek failed\n");
-	// 	return E_SIZE;
-	// }
-
-	int write_attempt = nblks * BLOCK_SIZE;
-	ssize_t write_actual = write(img->fd, buf, write_attempt);
-
-	if (write_actual == -1) {
-		return E_BADADDR;
-	}
-
-	if (write_actual < write_attempt) {
-		fprintf(stderr, "Error: Failed to write all %d bytes, only wrote %zd bytes\n", write_attempt, write_actual);
+	if (lseek(image_device->fd, first_blk * BLOCK_SIZE, SEEK_SET) == -1) {
+		fprintf(stderr, "image_write: seek failed\n");
 		return E_SIZE;
 	}
-
+	int tried_write = nblks * BLOCK_SIZE;
+	ssize_t actually_written = write(image_device->fd, buf, tried_write);
+	if (actually_written == -1) {
+		return E_BADADDR;
+	}
+	if (actually_written < tried_write) {
+		fprintf(stderr, "image_write: Only wrote %zd bytes out of %d bytes\n", tried_write, actually_written);
+		return E_SIZE;
+	}
 	return SUCCESS;
 }
 
@@ -143,15 +123,14 @@ static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 */
 static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 {
-	//CS492: your code here
-	struct image_dev *img = dev->private;
-
-	/* Check whether the device is unavailable */
-	if ((img->fd == -1) || (fsync(img->fd) == -1)) {
+	struct image_dev* image_device = dev->private;
+	if (image_device->fd == -1) {
 		return E_UNAVAIL;
 	}
-
-	return SUCCESS;		// Otherwise, return SUCCESS
+	if (fsync(image_device->fd) == -1) {
+		return E_UNAVAIL;
+	}
+	return SUCCESS;
 }
 
 /**
@@ -163,17 +142,14 @@ static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 */
 static void image_close(struct blkdev *dev)
 {
-	//CS492: your code here
-	struct image_dev *img = dev->private;
-
-	/* Check whether the disk is available */
-	if (img->fd != -1) {
-		close(img->fd); 		// If available, close
+	struct image_dev* image_device = dev->private;
+	if (image_device->fd != -1) {
+		return;
 	}
-
-	free(img);					// Free img and dev, and set private to NULL
-	dev->private = NULL;
-	free(dev);
+	if (close(image_device->fd) == -1) {
+		return;
+	}
+	return;
 }
 
 /** Operations on this block device */

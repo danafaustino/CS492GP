@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-g -D_FILE_OFFSET_BITS=64 -Wall
+CFLAGS=-D_FILE_OFFSET_BITS=64 -Wall -g
 LIBS=-lfuse
 
 all:

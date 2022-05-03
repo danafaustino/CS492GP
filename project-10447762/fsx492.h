@@ -20,7 +20,7 @@ enum {
 enum { FS_FILENAME_SIZE = 28 };
 struct fs_dirent {
 	uint32_t valid : 1; /* entry valid flag */
-	uint32_t unused : 1; /* unused */
+	uint32_t isDir : 1; /* entry directory flag */
 	uint32_t inode : 30; /* entry inode */
 	char name[FS_FILENAME_SIZE]; /* with trailing '\0' */
 }; /* total 32 bytes */
