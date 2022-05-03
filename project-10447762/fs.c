@@ -484,7 +484,7 @@ static int inode_from_full_path(const char *path){
 	}
 
 	//directories only ever use one block, which simplifies this a lot
-	int inode = superblock.root_inode; //start at the root directory, should be inode 1
+	int inode = sb.root_inode; //start at the root directory, should be inode 1
 	struct fs_inode current_inode;
 	for (int i = 0; i < number_of_path_components; i++){
 		int inode_is_used_result = inode_is_used(inode);
@@ -1449,14 +1449,14 @@ static int fs_rmdir(const char *path)
 		return -EIO;
 	}
 
-	//return blk and clear inode
-	return_blk(inode->direct[0]);
-	memset(inode, 0, sizeof(struct fs_inode));
-	return_inode(inode_idx);
+	// //return blk and clear inode
+	// return_blk(inode->direct[0]);
+	// memset(inode, 0, sizeof(struct fs_inode));
+	// return_inode(inode_idx);
 
-	//update
-	update_inode(inode_idx);
-	update_blk();
+	// //update
+	// update_inode(inode_idx);
+	// update_blk();
 
 	return SUCCESS;
 }
