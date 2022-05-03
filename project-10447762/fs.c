@@ -727,23 +727,16 @@ static int fs_opendir(const char *path, struct fuse_file_info *fi)
 	char *_path = strdup(path);
 	int inode_idx = translate(_path);
 	if (inode_idx < 0) return inode_idx;
-	int inode_number = inode_from_full_path(path);
-	if (inode_number == -1){
-		return -EIO;
-	}
-	if (inode_number < 0){
-		return inode_number; //either -ENOENT or -ENOTDIR
-	}
+	struct fs_inode* inode = &inodes[inode_idx];
+	if (inode->type != FS_DIR) return -ENOTDIR;
+	fi->fh = inode_idx;
 	// Dana: This is where error is - .mode is returning 0
-	struct fs_inode inode;
-	if (read_inode(inode_number, &inode) != 0){
-		return -EIO;
-	}
-	if (!S_ISDIR(inode.mode)){
-		// print the mode
-		printf("%o\n", inode.mode);
-		return -ENOTDIR;
-	} 
+	// struct fs_inode inode;
+	// if (!S_ISDIR(inode.mode)){
+	// 	// print the mode
+	// 	printf("%o\n", inode.mode);
+	// 	return -ENOTDIR;
+	// } 
 	fi->fh = (uint64_t) inode_idx;
 	return SUCCESS;
 }
