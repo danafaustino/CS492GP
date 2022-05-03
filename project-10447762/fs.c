@@ -1,11 +1,6 @@
 /*
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wsizeof-array-argument"
-#pragma ide diagnostic ignored "bugprone-sizeof-expression"
-*/
-/*
  * file:        homework.c
- * description: skeleton file for CSX492 file system
+ * description: skeleton file for CS492 file system
  *
  * Credit:
  * 	Peter Desnoyers, November 2016
@@ -23,12 +18,10 @@
 #include <stdio.h>
 #include <errno.h>
 #include <stdbool.h>
-#include <limits.h> //for INT_MAX
+#include <limits.h>
 
 #include "fsx492.h"
 #include "blkdev.h"
-
-
 
 /* 
  * disk access - the global variable 'disk' points to a blkdev
@@ -43,19 +36,6 @@ extern struct blkdev *disk; //see main.c
  * CS492: feel free to add any data structures, external variables, functions you want to add here
 */
 
-/** COPIED FROM main.c
- * Split string into array of at most n tokens.
- *
- * If toks is NULL, p is not altered and function returns
- * the token count. Otherwise, p is altered by strtok()
- * and function returns tokens in the toks array, which
- * point to elements of p string.
- *
- * @param p the character string
- * @param toks token array
- * @param n max number of tokens to retrieve, 0 = unlimited
- * @param delim the delimiter string between tokens
- */
 static int split(char *p, char *toks[], int n, char *delim)
 {
     if (n == 0) {
@@ -80,10 +60,7 @@ static int split(char *p, char *toks[], int n, char *delim)
     return i;
 }
 static struct fs_super superblock;
-
-//checks the bitmap to see if a given inode number is valid
-//could return -1 if reading from the disk fails
-static int inode_is_used(int inode_num){
+static int inode_used(int inode_num){
 	char *inode_bitmap = malloc(FS_BLOCK_SIZE * superblock.inode_map_sz);
 	if (inode_bitmap == NULL){
 		return -1;
@@ -97,7 +74,6 @@ static int inode_is_used(int inode_num){
 	return result;
 }
 
-//before calling this function, make sure that inode_num is used by calling inode_is_used
 static int read_inode(int inode_num, struct fs_inode* buf){
 	char temp_block[FS_BLOCK_SIZE];
 	int block_number = 1 + superblock.inode_map_sz + superblock.block_map_sz + inode_num / INODES_PER_BLK;
@@ -158,13 +134,13 @@ static int inode_from_full_path(const char *path){
 	int inode = superblock.root_inode; //start at the root directory, should be inode 1
 	struct fs_inode current_inode;
 	for (int i = 0; i < number_of_path_components; i++){
-		int inode_is_used_result = inode_is_used(inode);
-		if (inode_is_used_result == -1){
+		int inode_used_result = inode_used(inode);
+		if (inode_used_result == -1){
 			fprintf(stderr, "error reading from disk on line %d\n", __LINE__);
 			free(path_components);
 			return -1;
 		}
-		if (inode_is_used_result == 0 || inode == 0){
+		if (inode_used_result == 0 || inode == 0){
 			fprintf(stderr,
 				"could not get inode from full path: inode %u not used (or 0)\n"
 				"when trying to find the inode of file '%s'\n"
