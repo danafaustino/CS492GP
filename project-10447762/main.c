@@ -51,7 +51,7 @@ int homework_part;
  */
 enum { MAX_PATH = 4096 };
 
-static void help(){
+static void help() {
     printf("Arguments:\n");
     printf(" -cmdline : Enter an interactive REPL that provides a filesystem view into the image\n");
     printf(" -image <name.img> : Use the provided image file that contains the filesystem\n");
@@ -837,12 +837,12 @@ int main(int argc, char **argv)
     /* Argument processing and checking
      */
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-    if (fuse_opt_parse(&args, &_data, opts, NULL) == -1){
+    if (fuse_opt_parse(&args, &_data, opts, NULL) == -1) {
         help();
         exit(1);
     }
 
-    if (_data.image_name == 0){
+    if (_data.image_name == 0) {
         fprintf(stderr, "You must provide an image\n");
         help();
         exit(1);
