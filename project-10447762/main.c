@@ -1,7 +1,7 @@
 struct stat sb;
 /*
  * file:        misc.c
- * description: various support functions for CSX492 file system
+ * description: various support functions for CS492 file system
  *              startup argument parsing and checking, etc.
  *
  * Credit:
@@ -33,7 +33,7 @@ struct stat sb;
 // should be defined in string.h but is not on macos
 extern char *strdup(const char* str);
 /**
- * All homework functions accessed through operations structure. */
+ * All functions accessed through operations structure. */
 extern struct fuse_operations fs_ops;
 
 /**  disk block device */
@@ -41,8 +41,8 @@ struct blkdev *disk;
 
 struct data {
     char *image_name;
-    int   part;
-    int   cmd_mode;
+    int part;
+    int cmd_mode;
 } _data;
 int homework_part;
 
@@ -55,7 +55,6 @@ static void help(){
     printf("Arguments:\n");
     printf(" -cmdline : Enter an interactive REPL that provides a filesystem view into the image\n");
     printf(" -image <name.img> : Use the provided image file that contains the filesystem\n");
-//    printf(" -part # : Give either 1, 2 or 3 that correlates to the question in the homework being tested. This will set the homework_part global variable, which may be useful for you as your program runs.\n");
 }
 
 /*
@@ -69,21 +68,20 @@ static void help(){
 static struct fuse_opt opts[] = {
         {"-image %s", offsetof(struct data, image_name), 0},
         {"-cmdline", offsetof(struct data, cmd_mode), 1},
-// PJG -- temporary
-//    {"-part %d", offsetof(struct data, part), 0},
         FUSE_OPT_END
 };
 
 /* Utility functions
  */
 
-/*
+/**
  * strmode - translate a numeric mode into a string
  *
  * @param output buffer
  * @param mode the numeric mode
  * @return pointer to output buffer
  */
+
 static char *strmode(char *buf, int mode)
 {
     int mask = 0400;
@@ -114,7 +112,6 @@ static int split(char *p, char *toks[], int n, char *delim)
         n = INT_MAX;
     }
     if (toks == NULL){
-        // do not alter p if not returning names
         p = strdup(p);
     }
     char *str;
@@ -640,19 +637,14 @@ static int do_stat(char *argv[])
  */
 static void _blksiz(int size)
 {
-    blksiz = size;	// record new block size
-    if (blkbuf){	// free old block buffer
+    blksiz = size; // record new block size
+    if (blkbuf){ // free old block buffer
         free(blkbuf);
     }
-    blkbuf = malloc(blksiz);	// create new block buffer
+    blkbuf = malloc(blksiz); // create new block buffer
     printf("read/write block size: %d\n", blksiz);
 }
 
-/**
- * Set read/write block size
- *
- * @param argv argv[0] is block size as string
- */
 static int do_blksiz(char *argv[])
 {
     _blksiz(atoi(argv[0]));
@@ -665,6 +657,7 @@ static int do_blksiz(char *argv[])
  * @param argv argv[0] is file name relative
  *   to current directory
  */
+
 static int do_truncate(char *argv[])
 {
     char path[MAX_PATH];
@@ -830,12 +823,9 @@ static void fixup(int argc, char *argv[]){
     }
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv){
     fixup(argc, argv);
 
-    /* Argument processing and checking
-     */
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     if (fuse_opt_parse(&args, &_data, opts, NULL) == -1){
         help();
@@ -860,17 +850,13 @@ int main(int argc, char **argv)
         help();
         exit(1);
     }
-
-//    homework_part = _data.part;
     homework_part = 2; // PJG
 
-    if (_data.cmd_mode){  /* process interactive commands */
+    if (_data.cmd_mode){
         fs_ops.init(NULL);
         _blksiz(FS_BLOCK_SIZE);
         cmdloop();
         return 0;
     }
-
-    /** pass control to fuse */
     return fuse_main(args.argc, args.argv, &fs_ops, NULL);
 }
