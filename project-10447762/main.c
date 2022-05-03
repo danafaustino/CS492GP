@@ -690,19 +690,13 @@ static int do_touch(char *argv[])
 {
     char path[MAX_PATH];
     full_path(argv[0], path);
-    printf("-1\n");
-
     // try creating new file
     int status = fs_ops.mknod(path, 0777 | S_IFREG, 0);
-    printf("0\n");
     if (status == -EEXIST){
         // if exists, modify its access/mod time to now
         struct utimbuf ut;
-        printf("1\n");
         ut.actime = ut.modtime = time(NULL);
-        printf("2\n");
         status = fs_ops.utime(path, &ut);
-        printf("3\n");
     }
     return status;
 }
