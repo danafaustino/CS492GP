@@ -728,7 +728,7 @@ static int fs_opendir(const char *path, struct fuse_file_info *fi)
 	int inode_idx = translate(_path);
 	if (inode_idx < 0) return inode_idx;
 	struct fs_inode* inode = &inodes[inode_idx];
-	if (!S_ISDIR(inode.mode)) return -ENOTDIR;
+	//if (!S_ISDIR(inode.mode)) return -ENOTDIR;
 	fi->fh = inode_idx;
 	// Dana: This is where error is - .mode is returning 0
 	// struct fs_inode inode;
