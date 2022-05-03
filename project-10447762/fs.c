@@ -1514,6 +1514,11 @@ static int fs_statfs(const char *path, struct statvfs *st)
 }
 
 static int fs_utime(const char *path, struct utimbuf *timebuf){
+	struct file *f;
+	f = find_file(path);
+	if (!f){
+		return -ENOENT;
+	}
 	return 0;
 }
 
