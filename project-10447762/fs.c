@@ -208,7 +208,6 @@ static int logical_to_physical(struct fs_inode *inode, int logical){
 	}
 }
 
-//returns 0 on success, -1 if file does not have enough blocks, and -EIO on error
 int read_block_of_file(uint32_t logical_block_number, struct fs_inode *inode, void *buf){
 	int physical_block_number = logical_to_physical(inode, logical_block_number);
 	if (physical_block_number < 0){
@@ -223,7 +222,6 @@ int read_block_of_file(uint32_t logical_block_number, struct fs_inode *inode, vo
 	return 0;
 }
 
-//returns 0 on success, -1 if file does not have enough blocks, and -EIO on error
 int write_block_to_file(uint32_t block_number, struct fs_inode *inode, void *buf){
 	int physical_block_number = logical_to_physical(inode, block_number);
 	if (physical_block_number < 0){
@@ -238,7 +236,6 @@ int write_block_to_file(uint32_t block_number, struct fs_inode *inode, void *buf
 	return 0;
 }
 
-//returns a block number on success, or -ENOSPC or -EIO on failure
 static int allocate_zeroed_block(){
 	char *block_bitmap = malloc(FS_BLOCK_SIZE * superblock.block_map_sz);
 	if (block_bitmap == NULL){
@@ -259,7 +256,6 @@ static int allocate_zeroed_block(){
 		free(block_bitmap);
 		return -ENOSPC;
 	}
-	//zero out the new block
 	char zeros[FS_BLOCK_SIZE];
 	memset(zeros, 0, FS_BLOCK_SIZE);
 	if (disk->ops->write(disk, new_block_num, 1, zeros) != SUCCESS){
@@ -271,12 +267,10 @@ static int allocate_zeroed_block(){
 		free(block_bitmap);
 		return -EIO;
 	}
-	//if the rest of the write fails after this, then an inode is permanently unusable. Too bad.
 	free(block_bitmap);
 	return new_block_num;
 }
 
-//returns 0 on success, or -EIO or -ENOSPC on error
 static int put_block_in_file(struct fs_inode *inode, int logical_block, void *buf){
 	if (logical_block < N_DIRECT){
 		if (inode->direct[logical_block] == 0){
@@ -293,10 +287,6 @@ static int put_block_in_file(struct fs_inode *inode, int logical_block, void *bu
 		if (inode->indir_1 == 0){
 			int temp = allocate_zeroed_block();
 			if (temp < 0){
-				/* TODO:
-				if a block is allocated, then allocating a new indir_1 block fails,
-				the first block will be marked as used even though it isn't
-				*/
 				return temp;
 			}
 			inode->indir_1 = temp;
@@ -319,7 +309,6 @@ static int put_block_in_file(struct fs_inode *inode, int logical_block, void *bu
 			return -EIO;
 		}
 	} else {
-		//double indirect block
 		if (inode->indir_2 == 0){
 			int temp = allocate_zeroed_block();
 			if (temp < 0){
@@ -366,7 +355,7 @@ static int put_block_in_file(struct fs_inode *inode, int logical_block, void *bu
 
 
 /* 
- ********************* Fuse functions
+ * CS492: FUSE functions
 */
 
 
@@ -378,26 +367,19 @@ static int put_block_in_file(struct fs_inode *inode, int logical_block, void *bu
  * argument or the return value.
  *
  * @param conn: fuse connection information - unused
- *
  * @return: unused - returns NULL
 */
+
 void* fs_init(struct fuse_conn_info *conn)
 {
-	//We'll probably need easy access to the superblock, so I'll
-	//read it from the disk here, and store it in a global variable.
-	//It doesn't look like the superblock ever changes, so we don't have to worry
-	//about writing this back to the disk
 	int retval = disk->ops->read(disk, 0, 1, &superblock);
 	if(retval != SUCCESS){
 		fprintf(stderr, "fs_init: got return value of %d when reading the superblock\n", retval);
 		abort();
 	}
-	//debug, make sure that the superblock makes sense
-	//check that the magic number is correct
 	if (superblock.magic != FS_MAGIC){
 		fprintf(stderr, "fs_init: superblocks contains wrong magic number, probably corrupt\n");
 	}
-	//check that the number of blocks matches what is stored in disk
 	if (disk->ops->num_blocks(disk) != superblock.num_blocks){
 		fprintf(stderr, "fs_init: superblock contains wrong number of blocks, probably corrupt\n");
 	}
@@ -409,9 +391,9 @@ void* fs_init(struct fuse_conn_info *conn)
  * getattr - get file or directory attributes. For a description of
  * the fields in 'struct stat', see 'man lstat'.
  *
- * Note - you can handle some fields as follows:
- * st_nlink - always set to 1
- * st_atime, st_ctime - set to same value as st_mtime
+ * Note: you can handle some fields as follows:
+ * st_nlink: always set to 1
+ * st_atime, st_ctime: set to same value as st_mtime
  *
  * @param path: the file path
  * @param sb: pointer to stat struct
@@ -431,45 +413,33 @@ static int fs_getattr(const char *path, struct stat *sb)
 		return -EIO;
 	}
 	if (inode_number_of_file < 0){
-		return inode_number_of_file; //it is either -ENOENT or -ENOTDIR
+		return inode_number_of_file;
 	}
 	struct fs_inode inode_of_file;
 	if (read_inode(inode_number_of_file, &inode_of_file) != 0){
 		return -EIO;
 	}
-	//DEBUG: print direct blocks used by file
-	/*
-	fprintf(stderr, "%s uses blocks: ", path);
-	for (int i = 0; i < N_DIRECT; i++){
-		fprintf(stderr, "%d, ", inode_of_file.direct[i]);
-	}
-	fprintf(stderr, "\n");
-	*/
-	//now, set all the fields of sb
-	sb->st_dev = 0; //not sure what the 'ID of device containing file' should be, maybe fix this later
+	sb->st_dev = 0;
 	sb->st_ino = inode_number_of_file;
 	sb->st_mode = inode_of_file.mode;
 	sb->st_nlink = 1;
 	sb->st_uid = inode_of_file.uid;
 	sb->st_gid = inode_of_file.gid;
-	sb->st_rdev = 0; //not sure what the 'device ID (if special file)' should be, maybe fix this later
+	sb->st_rdev = 0;
 	sb->st_size = inode_of_file.size;
 	sb->st_blksize = FS_BLOCK_SIZE;
-	sb->st_blocks = inode_of_file.size / 512 + (inode_of_file.size % 512 != 0); //st_blocks is supposed to be in 512-byte units
-	//The comment above this function says to set st_ctime to the same value as st_mtime
-	//However, inodes in our filesystem have a ctime field that is different from the mtime,
-	//So I'm using this field instead of just mtime
+	sb->st_blocks = inode_of_file.size / 512 + (inode_of_file.size % 512 != 0);
 	sb->st_ctime = inode_of_file.ctime;
 	sb->st_mtime = inode_of_file.mtime;
 	sb->st_atime = inode_of_file.mtime;
 	return 0;
 }
 
-
 /*
- * open - open file directory
+ * opendir - open file directory
  *
- * You can save information about the open directory in fi->fh. If you allocate memory, free it in fs_releasedir.
+ * You can save information about the open directory in fi->fh. 
+ * If you allocate memory, free it in fs_releasedir.
  *
  * @param path: the file path
  * @param fi: fuse file system information
@@ -478,26 +448,23 @@ static int fs_getattr(const char *path, struct stat *sb)
  *	-ENOENT  - a component of the path is not present
  *	-ENOTDIR - an intermediate component of path not a directory
 */
+
 static int fs_opendir(const char *path, struct fuse_file_info *fi)
 {
-	//I don't know if anything really has to be done here (besides checking that the path exists)
 	int inode_number = inode_from_full_path(path);
 	if (inode_number == -1){
 		return -EIO;
 	}
 	if (inode_number < 0){
-		return inode_number; //either -ENOENT or -ENOTDIR
+		return inode_number;
 	}
-	//make sure 'path' is a directory
 	struct fs_inode inode;
 	if (read_inode(inode_number, &inode) != 0){
 		return -EIO;
 	}
 	if (!S_ISDIR(inode.mode)){
-		return -ENOTDIR; //'path' is not a directory
+		return -ENOTDIR; 
 	}
-	//main.c does not check for permissions, but the inodes have data about owner/group
-	//currently ignoring any permission checking
 	return 0;
 } 
 
@@ -505,8 +472,10 @@ static int fs_opendir(const char *path, struct fuse_file_info *fi)
 /*
     readdir - get directory contents
 
-    For each entry in the directory, invoke the 'filler' function, which is passed as a function pointer, as follows:
-    filler(buf, <name>, <statbuf>, 0) where <statbuf> is a struct stat, just like in getattr.
+    For each entry in the directory, invoke the 'filler' function, 
+	which is passed as a function pointer, as follows:
+    filler(buf, <name>, <statbuf>, 0) 
+	where <statbuf> is a struct stat, just like in getattr.
 
     @param path: the directory path
     @param ptr: filler buf pointer
@@ -518,23 +487,20 @@ static int fs_opendir(const char *path, struct fuse_file_info *fi)
     	-ENOENT  - a component of the path is not present
     	-ENOTDIR - an intermediate component of path not a directory
 */
-static int fs_readdir(const char *path, void *ptr, fuse_fill_dir_t filler,
-		       off_t offset, struct fuse_file_info *fi)
-{
+static int fs_readdir(const char *path, void *ptr, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 	int inode_number = inode_from_full_path(path);
 	if (inode_number == -1){
 		return -EIO;
 	}
 	if (inode_number < 0){
-		return inode_number; //either -ENOENT or -ENOTDIR
+		return inode_number;
 	}
-	//make sure 'path' is a directory
 	struct fs_inode inode;
 	if (read_inode(inode_number, &inode) != 0){
 		return -EIO;
 	}
 	if (!S_ISDIR(inode.mode)){
-		return -ENOTDIR; //'path' is not a directory
+		return -ENOTDIR; 
 	}
 	struct fs_dirent entries[DIRENTS_PER_BLK];
 	if (disk->ops->read(disk, inode.direct[0], 1, entries) != SUCCESS){
@@ -544,26 +510,21 @@ static int fs_readdir(const char *path, void *ptr, fuse_fill_dir_t filler,
 		if (!entries[i].valid){
 			continue;
 		}
-		//load the inode that entries[i] points to
 		struct fs_inode inode_of_entry;
 		if (read_inode(entries[i].inode, &inode_of_entry) != 0){
 			return -EIO;
 		}
-		//fill out the stat struct, then call filler(ptr, entries[i].name, &sb, 0)
 		struct stat sb;
-		sb.st_dev = 0; //not sure what the 'ID of device containing file' should be, maybe fix this later
+		sb.st_dev = 0; 
 		sb.st_ino = entries[i].inode;
 		sb.st_mode = inode_of_entry.mode;
 		sb.st_nlink = 1;
 		sb.st_uid = inode_of_entry.uid;
 		sb.st_gid = inode_of_entry.gid;
-		sb.st_rdev = 0; //not sure what the 'device ID (if special file)' should be, maybe fix this later
+		sb.st_rdev = 0;
 		sb.st_size = inode_of_entry.size;
 		sb.st_blksize = FS_BLOCK_SIZE;
-		sb.st_blocks = inode_of_entry.size / 512 + (inode_of_entry.size % 512 != 0); //st_blocks is supposed to be in 512-byte units
-		//The comment above this function says to set st_ctime to the same value as st_mtime
-		//However, inodes in our filesystem have a ctime field that is different from the mtime,
-		//So I'm using this field instead of just mtime
+		sb.st_blocks = inode_of_entry.size / 512 + (inode_of_entry.size % 512 != 0); 
 		sb.st_ctime = inode_of_entry.ctime;
 		sb.st_mtime = inode_of_entry.mtime;
 		sb.st_atime = inode_of_entry.mtime;
@@ -572,13 +533,12 @@ static int fs_readdir(const char *path, void *ptr, fuse_fill_dir_t filler,
 	return 0;
 }
 
-
 /*
  * Release resources when directory is closed.
  * If you allocate memory in fs_opendir, free it here.
  *
  * @param path: the directory path
- * @param fi: fuse file system information -- you do not have to use it 
+ * @param fi: fuse file system information -- you do not have to use it
  *
  * @return: 0 if successful, or -error number
  *	-ENOENT  - a component of the path is not present
@@ -586,25 +546,20 @@ static int fs_readdir(const char *path, void *ptr, fuse_fill_dir_t filler,
 */
 static int fs_releasedir(const char *path, struct fuse_file_info *fi)
 {
-	//Since nothing was really done in fs_opendir, nothing needs to be done here,
-	//except checking that path is valid I guess?
 	int inode_number = inode_from_full_path(path);
 	if (inode_number == -1){
 		return -EIO;
 	}
 	if (inode_number < 0){
-		return inode_number; //either -ENOENT or -ENOTDIR
+		return inode_number; 
 	}
-	//make sure 'path' is a directory
 	struct fs_inode inode;
 	if (read_inode(inode_number, &inode) != 0){
 		return -EIO;
 	}
 	if (!S_ISDIR(inode.mode)){
-		return -ENOTDIR; //'path' is not a directory
+		return -ENOTDIR;
 	}
-	//main.c does not check for permissions, but the inodes have data about owner/group
-	//currently ignoring any permission checking
 	return 0;
 }
 
@@ -624,7 +579,6 @@ static int fs_releasedir(const char *path, struct fuse_file_info *fi)
 static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 {
 	if (path[0] == '\0'){
-		//if the path is "", somehow, then just return an error
 		return -EINVAL;
 	}
 	if (!strcmp(path, "/")){
@@ -635,21 +589,17 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 	if (split_path(path, temp_path, new_file_name) == -ENAMETOOLONG){
 		return -ENAMETOOLONG;
 	}
-	//fprintf(stderr, "temp_path = '%s'\nnew_file_name = '%s'\n", temp_path, new_file_name);
-
-	//now that we know the directory that this new file should be in, find the inode of that directory
 	int inode_num_of_dir = inode_from_full_path(temp_path);
 	if (inode_num_of_dir == -1){
 		return -EIO;
 	}
 	if (inode_num_of_dir < 0){
-		return inode_num_of_dir; //either -ENOENT or -ENOTDIR
+		return inode_num_of_dir;
 	}
 	struct fs_inode dir_inode;
 	if (read_inode(inode_num_of_dir, &dir_inode) != 0){
 		return -EIO;
 	}
-	//make sure temp_path is a directory
 	if (!S_ISDIR(dir_inode.mode)){
 		return -ENOTDIR;
 	}
@@ -657,7 +607,6 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 	if (disk->ops->read(disk, dir_inode.direct[0], 1, entries) != SUCCESS){
 		return -EIO;
 	}
-	//make sure that no file with this name already exists in this directory
 	bool dir_has_space = false;
 	int entry_index = -1;
 	for (int i = 0; i < DIRENTS_PER_BLK; i++){
@@ -675,7 +624,6 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 	if (!dir_has_space){
 		return -ENOSPC;
 	}
-	//find a new inode number for this file
 	int new_inode_num = -1;
 	char *inode_bitmap = malloc(FS_BLOCK_SIZE * superblock.inode_map_sz);
 	if (inode_bitmap == NULL){
@@ -695,15 +643,11 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 		free(inode_bitmap);
 		return -ENOSPC;
 	}
-	//now mark that inode as used in the bitmap
 	inode_bitmap[new_inode_num / 8] |= 1 << (new_inode_num % 8);
 	if (disk->ops->write(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		return -EIO;
 	}
-	//If this function returns an error after this point, the inode has been marked as used in
-	//the bitmap, but the file was not created successfully. This means the inode will
-	//never be usable again
 	free(inode_bitmap);
 	struct fs_inode new_inode = {
 		.uid = fuse_get_context()->uid,
@@ -715,12 +659,9 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 		.indir_1 = 0,
 		.indir_2 = 0,
 	};
-	//set all direct blocks to 0
 	for (int i = 0; i < N_DIRECT; i++){
 		new_inode.direct[i] = 0;
 	}
-	//read the block that contains the new inode slot, modify the part of it that corresponds to
-	//this new inode, then write it back to the disk
 	int block_number_that_contains_new_inode =
 		1 + superblock.inode_map_sz + superblock.block_map_sz
 		+ (new_inode_num / INODES_PER_BLK);
@@ -733,7 +674,6 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 	if (disk->ops->write(disk, block_number_that_contains_new_inode, 1, block_containing_new_inode) != SUCCESS){
 		return -EIO;
 	}
-	//now, update the directory containing this file to have an entry for the new file
 	entries[entry_index].valid = 1;
 	entries[entry_index].isDir = 0;
 	entries[entry_index].inode = new_inode_num;
@@ -744,7 +684,6 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 	}
 	return 0;
 }
-
 
 /*
  * 	mkdir - create a directory with the given mode. Behavior undefined when mode bits other than the low 9 bits are used.
@@ -760,12 +699,7 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 */
 static int fs_mkdir(const char *path, mode_t mode)
 {
-	/*
-	should be similar to mknod, but the newly created directory needs to have direct[0] allocated,
-	and all entries .valid set to 0
-	*/
 	if (path[0] == '\0'){
-		//if the path is "" somehow, then just return an error
 		return -EINVAL;
 	}
 	if (!strcmp(path, "/")){
@@ -776,21 +710,17 @@ static int fs_mkdir(const char *path, mode_t mode)
 	if (split_path(path, temp_path, new_dir_name) == -ENAMETOOLONG){
 		return -ENAMETOOLONG;
 	}
-	//fprintf(stderr, "temp_path = '%s'\nnew_dir_name = '%s'\n", temp_path, new_dir_name);
-
-	//find inode of directory that should contain the new dir
 	int inode_num_of_containing_dir = inode_from_full_path(temp_path);
 	if (inode_num_of_containing_dir == -1){
 		return -EIO;
 	}
 	if (inode_num_of_containing_dir < 0){
-		return inode_num_of_containing_dir; //either -ENOENT or -ENOTDIR
+		return inode_num_of_containing_dir;
 	}
 	struct fs_inode containing_dir_inode;
 	if (read_inode(inode_num_of_containing_dir, &containing_dir_inode) != 0){
 		return -EIO;
 	}
-	//make sure temp_path is a directory
 	if (!S_ISDIR(containing_dir_inode.mode)){
 		return -ENOTDIR;
 	}
@@ -798,7 +728,6 @@ static int fs_mkdir(const char *path, mode_t mode)
 	if (disk->ops->read(disk, containing_dir_inode.direct[0], 1, entries) != SUCCESS){
 		return -EIO;
 	}
-	//make sure no file with this name already exists in the containing directory
 	bool dir_has_space = false;
 	int entry_index = -1;
 	for (int i = 0; i < DIRENTS_PER_BLK; i++){
@@ -838,20 +767,16 @@ static int fs_mkdir(const char *path, mode_t mode)
 	struct fs_inode new_inode = {
 		.uid = fuse_get_context()->uid,
 		.gid = fuse_get_context()->gid,
-		//main.c calls this function with a mode that does not have the dir bit set, so I'm setting
-		//it manually here.
 		.mode = (mode & 01777 & ~(fuse_get_context()->umask)) | S_IFDIR,
 		.ctime = time(NULL),
 		.mtime = time(NULL),
-		.size = 0, // /dir1, /dir2, and /dir3 all have size 0, so I'm assuming the size of a directory is always 0
+		.size = 0,
 		.indir_1 = 0,
 		.indir_2 = 0,
 	};
-	//set all direct blocks other than the first to 0
 	for (int i = 1; i < N_DIRECT; i++){
 		new_inode.direct[i] = 0;
 	}
-	//find a new block for this dir's entries
 	int new_block_num = -1;
 	char *block_bitmap = malloc(FS_BLOCK_SIZE * superblock.block_map_sz);
 	if (block_bitmap == NULL){
@@ -874,39 +799,25 @@ static int fs_mkdir(const char *path, mode_t mode)
 		free(inode_bitmap);
 		return -ENOSPC;
 	}
-	//now mark that block as used in the bitmap
 	block_bitmap[new_block_num / 8] |= 1 << (new_block_num % 8);
 	if (disk->ops->write(disk, 1 + superblock.inode_map_sz, superblock.block_map_sz, block_bitmap) != SUCCESS){
 		free(block_bitmap);
 		free(inode_bitmap);
 		return -EIO;
 	}
-	//If this function returns an error after this point, the block has been marked as used in
-	//the bitmap, but the dir was not created successfully. This means the block will
-	//never be usable again
 	free(block_bitmap);
-
-	//now mark new_inode_num as used in the bitmap
 	inode_bitmap[new_inode_num / 8] |= 1 << (new_inode_num % 8);
 	if (disk->ops->write(disk, 1, superblock.inode_map_sz, inode_bitmap) != SUCCESS){
 		free(inode_bitmap);
 		return -EIO;
 	}
-	//If this function returns an error after this point, the inode has been marked as used in
-	//the bitmap, but the dir was not created successfully. This means the inode will
-	//never be usable again
 	free(inode_bitmap);
-	
-	//zero out the new data block
 	struct fs_dirent zeros[FS_BLOCK_SIZE];
 	memset(zeros, 0, FS_BLOCK_SIZE);
 	if (disk->ops->write(disk, new_block_num, 1, zeros) != SUCCESS){
 		return -EIO;
 	}
 	new_inode.direct[0] = new_block_num;
-
-	//read the block that contains the new inode slot, modify the part of it that corresponds to
-	//this new inode, then write it back to the disk
 	int block_number_that_contains_new_inode =
 		1 + superblock.inode_map_sz + superblock.block_map_sz
 		+ (new_inode_num / INODES_PER_BLK);
@@ -919,7 +830,6 @@ static int fs_mkdir(const char *path, mode_t mode)
 	if (disk->ops->write(disk, block_number_that_contains_new_inode, 1, block_containing_new_inode) != SUCCESS){
 		return -EIO;
 	}
-	//now, update the directory containing this file to have an entry for the new file
 	entries[entry_index].valid = 1;
 	entries[entry_index].isDir = 1;
 	entries[entry_index].inode = new_inode_num;
@@ -1001,7 +911,6 @@ static int unset_bits(struct fs_inode *inode, char *block_bitmap){
 static int fs_unlink(const char *path)
 {
 	if (path[0] == '\0'){
-		//if the path is "" somehow, then just return an error
 		return -EINVAL;
 	}
 	if (!strcmp(path, "/")){
@@ -1010,23 +919,19 @@ static int fs_unlink(const char *path)
 	char temp_path[MAX_PATH];
 	char new_file_name[FS_FILENAME_SIZE];
 	if (split_path(path, temp_path, new_file_name) == -ENAMETOOLONG){
-		return -ENOENT; //If the filename is too long, then it can't exist
+		return -ENOENT; 
 	}
-	//fprintf(stderr, "temp_path = '%s'\nnew_file_name = '%s'\n", temp_path, new_file_name);
-
-	//now that we know the directory that this new file should be in, find the inode of that directory
 	int inode_num_of_dir = inode_from_full_path(temp_path);
 	if (inode_num_of_dir == -1){
 		return -EIO;
 	}
 	if (inode_num_of_dir < 0){
-		return inode_num_of_dir; //either -ENOENT or -ENOTDIR
+		return inode_num_of_dir;
 	}
 	struct fs_inode dir_inode;
 	if (read_inode(inode_num_of_dir, &dir_inode) != 0){
 		return -EIO;
 	}
-	//make sure temp_path is a directory
 	if (!S_ISDIR(dir_inode.mode)){
 		return -ENOTDIR;
 	}
@@ -1045,15 +950,6 @@ static int fs_unlink(const char *path)
 		return -ENOENT;
 	}
 
-	//need to check that this inode is not a directory, mark all of its data blocks as unused,
-	//mark that inode as unused, edit the containing directory's entry
-	/*
-	the existing files in fsx492.img all have .isDir set, even if they are not directories
-	It seems like the only way to tell if something is a directory is to look at its inode
-	if (entries[entry_index].isDir){
-		return -EISDIR;
-	}
-	*/
 	struct fs_inode inode_of_file_to_be_removed;
 	if (read_inode(entries[entry_index].inode, &inode_of_file_to_be_removed) != 0){
 		return -EIO;
@@ -1073,7 +969,6 @@ static int fs_unlink(const char *path)
 		free(block_bitmap);
 		return -EIO;
 	}
-	//all data blocks used by the file have been marked as unused, now need to mark the inode as unused, then write the updated bitmaps back to the disk
 	char *inode_bitmap = malloc(FS_BLOCK_SIZE * superblock.inode_map_sz);
 	if (inode_bitmap == NULL){
 		free(block_bitmap);
