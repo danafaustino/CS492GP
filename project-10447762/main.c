@@ -701,7 +701,7 @@ static int do_touch(char *argv[])
         printf("1\n");
         ut.actime = ut.modtime = time(NULL);
         printf("2\n");
-        status =fs_ops.utime(path, &ut);
+        status = fs_ops.utime(path, &ut);
         printf("3\n");
     }
     return status;

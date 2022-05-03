@@ -1514,7 +1514,7 @@ static int fs_statfs(const char *path, struct statvfs *st)
 }
 
 static int fs_utime(const char *path, struct utimbuf *timebuf){
-	return -ENOSYS;
+	return 0;
 }
 
 static int fs_truncate(const char *path, off_t offset){
