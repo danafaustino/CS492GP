@@ -85,11 +85,8 @@ static int read_inode(int inode_num, struct fs_inode* buf){
 	return 0;
 }
 
-enum {MAX_PATH = 4096 }; //Copied from main.c
+enum {MAX_PATH = 4096 };
 
-//reads a block (which is assumed to be a directory data block), and looks for an
-//entry that contains filename
-//returns 0 if not found, returns -1 on error
 static int scan_dir_block(int block_number, char *filename){
 	struct fs_dirent entries[DIRENTS_PER_BLK];
 	if(disk->ops->read(disk, block_number, 1, entries) != SUCCESS){
@@ -100,18 +97,13 @@ static int scan_dir_block(int block_number, char *filename){
 			continue;
 		}
 		if (!strcmp(entries[i].name, filename)){
-			//file found
 			return entries[i].inode;
 		}
 	}
-	//scanned entire block's worth of entries, not found
 	return 0;
 }
 
-//Given a path, returns the inode number of that file
-//Might return -ENOENT or -ENOTDIR, or -1 if reading from the disk failed
 static int inode_from_full_path(const char *path){
-	//fprintf(stderr, "now getting inode of '%s'\n", path);
 	if(path[0] != '/'){
 		fprintf(stderr, "cannot get inode from relative path\n");
 		return -ENOENT;
@@ -120,18 +112,11 @@ static int inode_from_full_path(const char *path){
 	strcpy(temp_path, path);
 	int number_of_path_components = split(temp_path, NULL, 0, "/");
 	if (number_of_path_components == 0){
-		//path is just "/", so return inode of root directory
 		return superblock.root_inode;
 	}
 	char** path_components = malloc(number_of_path_components * sizeof(char*));
 	split(temp_path, path_components, number_of_path_components, "/");
-	//path_components is now an array of strings
-	for (int i = 0; i < number_of_path_components; i++){
-		//fprintf(stderr, "component %d = '%s'\n", i, path_components[i]);
-	}
-
-	//directories only ever use one block, which simplifies this a lot
-	int inode = superblock.root_inode; //start at the root directory, should be inode 1
+	int inode = superblock.root_inode;
 	struct fs_inode current_inode;
 	for (int i = 0; i < number_of_path_components; i++){
 		int inode_used_result = inode_used(inode);
@@ -141,10 +126,7 @@ static int inode_from_full_path(const char *path){
 			return -1;
 		}
 		if (inode_used_result == 0 || inode == 0){
-			fprintf(stderr,
-				"could not get inode from full path: inode %u not used (or 0)\n"
-				"when trying to find the inode of file '%s'\n"
-				, inode, path);
+			fprintf(stderr, "could not get inode from full path: inode %u not used (or 0)\nwhen trying to find the inode of file '%s'\n", inode, path);
 			free(path_components);
 			return -ENOENT;
 		}
