@@ -786,6 +786,7 @@ static int cmdloop(void)
 
 		// process command
 		int err = cmds[i].f(&args[1]);
+		printf("%s, %s\n", cmds[i].name, &args[1]);
 		if (err != 0) {
 			printf("error: %s\n", strerror(-err));
 		}

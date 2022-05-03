@@ -174,12 +174,16 @@ static void free_char_ptr_array(char *arr[], int len) {
  */
 static int translate(char *path)
 {
-	if (strcmp(path, "/") == 0 || strlen(path) == 0) return root_inode;
+	if (strcmp(path, "/") == 0 || strlen(path) == 0) {
+		return root_inode;
+	}
 	int inode_idx = root_inode;
 	//get number of names
 	int num_names = parse(path, NULL, 0);
 	//if the number of names in the path exceed the maximum, return an error, error type to be fixed if necessary
-	if (num_names < 0) return -ENOTDIR;
+	if (num_names < 0) {
+		return -ENOTDIR;
+	}
 	if (num_names == 0) return root_inode;
 	//copy all the names
 	char *names[num_names];
@@ -223,7 +227,9 @@ static int translate_1(char *path, char *leaf)
 	//get number of names
 	int num_names = parse(path, NULL, 0);
 	//if the number of names in the path exceed the maximum, return an error, error type to be fixed if necessary
-	if (num_names < 0) return -ENOTDIR;
+	if (num_names < 0) {
+		return -ENOTDIR;
+	}
 	if (num_names == 0) return root_inode;
 	//copy all the names
 	char *names[num_names];
@@ -721,7 +727,16 @@ static int fs_opendir(const char *path, struct fuse_file_info *fi)
 	char *_path = strdup(path);
 	int inode_idx = translate(_path);
 	if (inode_idx < 0) return inode_idx;
-	if (!S_ISDIR(inodes[inode_idx].mode)) return -ENOTDIR;
+	struct fs_inode* inode = &inodes[inode_idx];
+	if (!S_ISDIR(inode.mode)) return -ENOTDIR;
+	fi->fh = inode_idx;
+	// Dana: This is where error is - .mode is returning 0
+	// struct fs_inode inode;
+	// if (!S_ISDIR(inode.mode)){
+	// 	// print the mode
+	// 	printf("%o\n", inode.mode);
+	// 	return -ENOTDIR;
+	// } 
 	fi->fh = (uint64_t) inode_idx;
 	return SUCCESS;
 }
@@ -751,7 +766,9 @@ static int fs_readdir(const char *path, void *ptr, fuse_fill_dir_t filler,
 	int inode_idx = translate(_path);
 	if (inode_idx < 0) return inode_idx;
 	struct fs_inode *inode = &inodes[inode_idx];
-	if (!S_ISDIR(inode->mode)) return -ENOTDIR;
+	if (!S_ISDIR(inode->mode)) {
+		return -ENOTDIR;
+	}
 	struct fs_dirent entries[DIRENTS_PER_BLK];
 	memset(entries, 0, DIRENTS_PER_BLK * sizeof(struct fs_dirent));
 	struct stat sb;
@@ -781,7 +798,9 @@ static int fs_releasedir(const char *path, struct fuse_file_info *fi)
 	char *_path = strdup(path);
 	int inode_idx = translate(_path);
 	if (inode_idx < 0) return inode_idx;
-	if (!S_ISDIR(inodes[inode_idx].mode)) return -ENOTDIR;
+	if (!S_ISDIR(inodes[inode_idx].mode)) {
+		return -ENOTDIR;
+	}
 	fi->fh = (uint64_t) -1;
 	return SUCCESS;
 }
@@ -837,7 +856,9 @@ static int fs_mknod(const char *path, mode_t mode, dev_t dev)
 	if (parent_inode_idx < 0) return parent_inode_idx;
 	//read parent info
 	struct fs_inode *parent_inode = &inodes[parent_inode_idx];
-	if (!S_ISDIR(parent_inode->mode)) return -ENOTDIR;
+	if (!S_ISDIR(parent_inode->mode)) {
+		return -ENOTDIR;
+	}
 
 	struct fs_dirent entries[DIRENTS_PER_BLK];
 	memset(entries, 0, DIRENTS_PER_BLK * sizeof(struct fs_dirent));
@@ -1148,7 +1169,9 @@ static int fs_unlink(const char *path)
 	struct fs_inode *parent_inode = &inodes[parent_inode_idx];
 	if (inode_idx < 0 || parent_inode_idx < 0) return -ENOENT;
 	if (S_ISDIR(inode->mode)) return -EISDIR;
-	if (!S_ISDIR(parent_inode->mode)) return -ENOTDIR;
+	if (!S_ISDIR(parent_inode->mode)) {
+		return -ENOTDIR;
+	}
 
 	//remove entire entry from parent dir
 	struct fs_dirent entries[DIRENTS_PER_BLK];
@@ -1296,7 +1319,9 @@ static int fs_rename(const char *src_path, const char *dst_path)
 
 	//read parent dir inode
 	struct fs_inode *parent_inode = &inodes[parent_inode_idx];
-	if (!S_ISDIR(parent_inode->mode)) return -ENOTDIR;
+	if (!S_ISDIR(parent_inode->mode)) {
+		return -ENOTDIR;
+	}
 
 	struct fs_dirent entries[DIRENTS_PER_BLK];
 	memset(entries, 0, DIRENTS_PER_BLK * sizeof(struct fs_dirent));
