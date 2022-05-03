@@ -410,6 +410,50 @@ int block_map_sz;		// block map size
 static struct fs_super sb;
 
 /* Helper Functions */
+
+/** COPIED FROM main.c
+ * Split string into array of at most n tokens.
+ *
+ * If toks is NULL, p is not altered and function returns
+ * the token count. Otherwise, p is altered by strtok()
+ * and function returns tokens in the toks array, which
+ * point to elements of p string.
+ *
+ * @param p the character string
+ * @param toks token array
+ * @param n max number of tokens to retrieve, 0 = unlimited
+ * @param delim the delimiter string between tokens
+ */
+static int split(char *p, char *toks[], int n, char *delim)
+{
+	if (n == 0) {
+		n = INT_MAX;
+	}
+	if (toks == NULL) {
+		// do not alter p if not returning names
+		p = strdup(p);
+	}
+	char *str;
+	char *lasts = NULL;
+	int i;
+	for (i = 0; i < n && (str = strtok_r(p, delim, &lasts)) != NULL; i++) {
+		p = NULL;
+		if (toks != NULL) {
+			toks[i] = str;
+		}
+	}
+	if (toks == NULL) {
+		free(p);
+	}
+	return i;
+}
+
+static void unset_block_bit(int block_num, char *block_bitmap){
+	if (block_num != 0){
+		block_bitmap[(block_num) / 8] &= ~(1 << (block_num % 8));
+	}
+}
+
 //checks the bitmap to see if a given inode number is valid
 //could return -1 if reading from the disk fails
 static int inode_is_used(int inode_num){
@@ -671,7 +715,7 @@ static int put_block_in_file(struct fs_inode *inode, int logical_block, void *bu
 		if (inode->indir_1 == 0){
 			int temp = allocate_zeroed_block();
 			if (temp < 0){
-				/* TODO:
+				/* 
 				if a block is allocated, then allocating a new indir_1 block fails,
 				the first block will be marked as used even though it isn't
 				*/
@@ -741,6 +785,8 @@ static int put_block_in_file(struct fs_inode *inode, int logical_block, void *bu
 	}
 	return 0;
 }
+
+
 
 
 
