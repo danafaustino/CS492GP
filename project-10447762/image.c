@@ -26,163 +26,130 @@ extern char* strdup(const char *);
 
 /** definition of image block device */
 struct image_dev {
-	char *path; // path to device file
-	int   fd; // file descriptor of open file
-	int   nblks; // number of blocks in device
+    char *path; // path to device file
+    int fd; // file descriptor of open file
+    int nblks; // number of blocks in device
 };
 
-/**
- * To count the number of blocks on the device
- * @param dev: the block device
- * @return: the number of blocks in the block device
+/*
+ * 	To count the number of blocks on the device
+ * 	@param dev: the block device
+ * 	@return: the number of blocks in the block device
 */
 static int image_num_blocks(struct blkdev *dev)
 {
-	//CS492: your code here
-	struct image_dev *img = dev->private;
-
-	if (!img || !(img->nblks)) {		// Check if img or nblks are NULL
-		return E_BADADDR;				// If either are NULL, return bad address
-	}
-	
-	return img->nblks;		// Otherwise, return the number of blocks in the block device
+	struct image_dev* temp = dev->private;
+	return temp->nblks;
 }
 
 
-/**
- * To read blocks from block device starting at give block index
- * @param dev: the block device
- * @param first_blk: index of the block to start reading from
- * @param nblks: number of blocks to read from the device
- * @param buf: buffer to store the data
- * @return: SUCCESS if successful, E_UNAVAIL if device unavailable
+/** 
+ *	To read blocks from block device starting at give block index
+ * 	@param dev: the block device
+ * 	@param first_blk: index of the block to start reading from
+ * 	@param nblks: number of blocks to read from the device
+ * 	@param buf: buffer to store the data
+ * 	@return: SUCCESS if successful, E_UNAVAIL if device unavailable
 */
 static int image_read(struct blkdev *dev, int first_blk, int nblks, void *buf)
 {
-	struct image_dev *im = dev->private;
-
-	/* Check whether the disk is unavailable */
-	if (im->fd == -1) {
+	struct image_dev* image_device = dev->private;
+	if (image_device->fd == -1){
 		return E_UNAVAIL;
 	}
-
-	assert(first_blk >= 0 && first_blk+nblks <= im->nblks);
-
-	int result = pread(im->fd, buf, nblks*BLOCK_SIZE, first_blk*BLOCK_SIZE);
-
-	/* Since we already checked the address, this shouldn't
-	 * happen very often.
-	 */
-	if (result < 0) {
-		fprintf(stderr, "read error on %s: %s\n", im->path, strerror(errno));
-		assert(0);
+	off_t seek_result = lseek(image_device->fd, first_blk * BLOCK_SIZE, SEEK_SET);
+	if (seek_result == -1){
+		fprintf(stderr, "image_read: seek failed\n");
+		return E_SIZE;
 	}
-	if (result != nblks*BLOCK_SIZE) {
-		fprintf(stderr, "short read on %s: %s\n", im->path, strerror(errno));
-		assert(0);
+	int amount_to_try_to_read = nblks * BLOCK_SIZE;
+	ssize_t amount_actually_read = read(image_device->fd, buf, amount_to_try_to_read);
+	if (amount_actually_read == -1){
+		return E_BADADDR;
+	}
+	if (amount_actually_read < amount_to_try_to_read){
+		fprintf(stderr, "image_read: could not read all %d bytes, only read %zd bytes\n", amount_to_try_to_read, amount_actually_read);
+		return E_SIZE;
 	}
 	return SUCCESS;
 }
 
-/**
- * To write bytes to block device starting at give block index
+/*
+ * write bytes to block device starting at give block index
  * @param dev: the block device
  * @param first_blk: index of the block to start writing to
  * @param nblks: number of blocks to write to the device
  * @param buf: buffer where data comes from
- * @return SUCCESS if successful, E_UNAVAIL if device unavailable
- *
- * Note: add in your code a test to print a warning message when
- * writing to the superblock (block 0).  The write should then still
- * happen.
+ * @return: SUCCESS if successful, E_UNAVAIL if device unavailable
 */
+
 static int image_write(struct blkdev * dev, int first_blk, int nblks, void *buf)
 {
-	//CS492: your code here
-	struct image_dev *img = dev->private;
-	int size = nblks * BLOCK_SIZE;
-
-	/* Check whether the device is unavailable */
-	if (img->fd == -1) {
+	struct image_dev* image_device = dev->private;
+	if (image_device->fd == -1){
 		return E_UNAVAIL;
 	}
-
-	if (first_blk == 0) {
-		printf("WARNING: Writing to superblock (block 0).");		// Warning message when writing to the superblock
-	}
-
-	// if (lseek(img->fd, first_blk * BLOCK_SIZE, SEEK_SET) == -1) {
-	// 	fprintf(stderr, "Error: Seek failed\n");
-	// 	return E_SIZE;
-	// }
-
-	int write_attempt = nblks * BLOCK_SIZE;
-	ssize_t write_actual = write(img->fd, buf, write_attempt);
-
-	if (write_actual == -1) {
-		return E_BADADDR;
-	}
-
-	if (write_actual < write_attempt) {
-		fprintf(stderr, "Error: Failed to write all %d bytes, only wrote %zd bytes\n", write_attempt, write_actual);
+	if (lseek(image_device->fd, first_blk * BLOCK_SIZE, SEEK_SET) == -1){
+		fprintf(stderr, "image_write: seek failed\n");
 		return E_SIZE;
 	}
-
+	int amount_to_try_to_write = nblks * BLOCK_SIZE;
+	ssize_t amount_actually_written = write(image_device->fd, buf, amount_to_try_to_write);
+	if (amount_actually_written == -1){
+		return E_BADADDR;
+	}
+	if (amount_actually_written < amount_to_try_to_write){
+		fprintf(stderr, "image_read: could not write all %d bytes, only wrote %zd bytes\n", amount_to_try_to_write, amount_actually_written);
+		return E_SIZE;
+	}
 	return SUCCESS;
 }
 
-/**
+/*
  * Flush the block device.
  * @param dev: the block device
  * @aparam first_blk: index of the block to start flushing 
  * @param nblks: number of blocks to flush
- * @return SUCCESS if successful, E_UNAVAIL if device unavailable
- *
- * Note: this function does not actually flush anything, it just returns
- * one or the other of the twp possible return values.
+ * @return: SUCCESS if successful, E_UNAVAIL if device unavailable
 */
+
 static int image_flush(struct blkdev * dev, int first_blk, int nblks)
 {
-	//CS492: your code here
-	struct image_dev *img = dev->private;
-
-	/* Check whether the device is unavailable */
-	if ((img->fd == -1) || (fsync(img->fd) == -1)) {
+	struct image_dev* image_device = dev->private;
+	if (image_device->fd == -1){
 		return E_UNAVAIL;
 	}
-
-	return SUCCESS;		// Otherwise, return SUCCESS
+	if (fsync(image_device->fd) == -1){
+		return E_UNAVAIL;
+	}
+	return SUCCESS;
 }
 
-/**
- * Close the block device (if it's available).
+/* 
+ * close the block device (if it's available).
  * @param dev: the block device
- *
- * Note: this is the opposite of image_create and, in addition to
- * closing the device, should also free all allocated memory.
 */
+
 static void image_close(struct blkdev *dev)
 {
-	//CS492: your code here
-	struct image_dev *img = dev->private;
-
-	/* Check whether the disk is available */
-	if (img->fd != -1) {
-		close(img->fd); 		// If available, close
+	struct image_dev *image_device = dev->private;
+	if (image_device->fd == -1){
+		return;
 	}
-
-	free(img);					// Free img and dev, and set private to NULL
-	dev->private = NULL;
-	free(dev);
+	if (close(image_device->fd) == -1){
+		return;
+	}
+	return;
 }
+
 
 /** Operations on this block device */
 static struct blkdev_ops image_ops = {
-	.num_blocks = image_num_blocks,
-	.read = image_read,
-	.write = image_write,
-	.flush = image_flush,
-	.close = image_close
+    .num_blocks = image_num_blocks,
+    .read = image_read,
+    .write = image_write,
+    .flush = image_flush,
+    .close = image_close
 };
 
 /**
@@ -193,41 +160,41 @@ static struct blkdev_ops image_ops = {
  */
 struct blkdev *image_create(char *path)
 {
-	struct blkdev *dev = malloc(sizeof(*dev));
-	struct image_dev *im = malloc(sizeof(*im));
+    struct blkdev *dev = malloc(sizeof(*dev));
+    struct image_dev *im = malloc(sizeof(*im));
 
-	if (dev == NULL || im == NULL)
-		return NULL;
+    if (dev == NULL || im == NULL)
+        return NULL;
 
-	im->path = strdup(path); /* save a copy for error reporting */
-	
-	/* open image device */
-	im->fd = open(path, O_RDWR);
-	if (im->fd < 0) {
-		fprintf(stderr, "can't open image %s: %s\n", path, strerror(errno));
-		return NULL;
-	}
+    im->path = strdup(path);    /* save a copy for error reporting */
+    
+    /* open image device */
+    im->fd = open(path, O_RDWR);
+    if (im->fd < 0){
+        fprintf(stderr, "can't open image %s: %s\n", path, strerror(errno));
+        return NULL;
+    }
 
-	/* access image device */
-	struct stat sb;
-	if (fstat(im->fd, &sb) < 0) {
-		fprintf(stderr, "can't access image %s: %s\n", path, strerror(errno));
-		return NULL;
-	}
+    /* access image device */
+    struct stat sb;
+    if (fstat(im->fd, &sb) < 0){
+        fprintf(stderr, "can't access image %s: %s\n", path, strerror(errno));
+        return NULL;
+    }
 
-	/* print a warning if file is not a multiple of the block size -
-	 * this isn't a fatal error, as extra bytes beyond the last full
-	 * block will be ignored by read and write.
-	 */
-	if (sb.st_size % BLOCK_SIZE != 0) {
-		fprintf(stderr, "warning: file %s not a multiple of %d bytes\n",
-				path, BLOCK_SIZE);
-	}
-	im->nblks = sb.st_size / BLOCK_SIZE;
-	dev->private = im;
-	dev->ops = &image_ops;
+    /* print a warning if file is not a multiple of the block size -
+     * this isn't a fatal error, as extra bytes beyond the last full
+     * block will be ignored by read and write.
+     */
+    if (sb.st_size % BLOCK_SIZE != 0){
+        fprintf(stderr, "warning: file %s not a multiple of %d bytes\n",
+                path, BLOCK_SIZE);
+    }
+    im->nblks = sb.st_size / BLOCK_SIZE;
+    dev->private = im;
+    dev->ops = &image_ops;
 
-	return dev;
+    return dev;
 }
 
 /**
@@ -236,10 +203,10 @@ struct blkdev *image_create(char *path)
  */
 void image_fail(struct blkdev *dev)
 {
-	struct image_dev *im = dev->private;
+    struct image_dev *im = dev->private;
 
-	if (im->fd != -1) {
-		close(im->fd);
-	}
-	im->fd = -1;
+    if (im->fd != -1){
+        close(im->fd);
+    }
+    im->fd = -1;
 }
